@@ -12,7 +12,6 @@ export { runQuiet } from './runQuiet.ts';
 export { runStep } from './runStep.ts';
 export { runValidation } from './runValidation.ts';
 export type { ValidationResult } from './runValidation.ts';
-export { Script } from './Script.ts';
 export { ScriptBuilder } from './ScriptBuilder.ts';
 export type { Step } from './Step.ts';
 export type { StepFn } from './StepFn.ts';
