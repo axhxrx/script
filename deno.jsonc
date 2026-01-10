@@ -3,4 +3,16 @@
   "version": "0.0.1",
   "exports": "./mod.ts",
   "license": "MIT",
+  "exclude": [
+    "bun",
+    "node_modules",
+    "**/*.bun.test.ts",
+    "**/*.bun.ts"
+  ],
+  "check": {
+    "exclude": [
+      "**/*.bun.ts",
+      "**/*.bun.test.ts"
+    ]
+  }
 }
