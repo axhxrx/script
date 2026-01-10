@@ -17,3 +17,10 @@ export function setGitConfig(key: string, value: string, cwd: string): void
 {
   run(`git config "${key}" "${value}"`, { cwd });
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/git/setConfig.ts');
+  console.log('setConfig function exported (mutates git config, not running in self-test)');
+  console.log('<- executed ./src/git/setConfig.ts');
+}

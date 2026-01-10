@@ -2,8 +2,10 @@ import { describe, expect, test } from 'bun:test';
 
 import { getGhAuthUsername } from './getAuthUsername.ts';
 
-describe('gh utilities', () => {
-  test('getGhAuthUsername should return string or null', () => {
+describe('gh utilities', () =>
+{
+  test('getGhAuthUsername should return string or null', () =>
+  {
     const username = getGhAuthUsername();
     expect(username === null || typeof username === 'string').toBe(true);
   });

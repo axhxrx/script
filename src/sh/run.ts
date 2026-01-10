@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 
-export interface RunOptions {
+export interface RunOptions
+{
   cwd?: string;
   silent?: boolean;
 }
@@ -26,18 +27,37 @@ export interface RunOptions {
 export function run(
   knownSafeCommand: string,
   options: RunOptions = {},
-): string {
-  try {
+): string
+{
+  try
+  {
     const result = execSync(knownSafeCommand, {
       cwd: options.cwd,
       encoding: 'utf-8',
       stdio: options.silent ? 'pipe' : 'inherit',
     });
     return typeof result === 'string' ? result.trim() : '';
-  } catch (error) {
-    if (!options.silent) {
+  }
+  catch (error)
+  {
+    if (!options.silent)
+    {
       throw error;
     }
     return '';
   }
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/sh/run.ts');
+
+  // Exercise the function with a safe command (uses stdio: 'inherit' by default)
+  run('echo "run.ts test passed"');
+
+  // Also test silent mode which captures output
+  const captured = run('echo "silent mode test"', { silent: true });
+  console.log('run() with silent mode captured:', captured);
+
+  console.log('<- executed ./src/sh/run.ts');
 }

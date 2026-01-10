@@ -30,3 +30,15 @@ export function createScript(): Script
 {
   return new Script();
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/createScript.ts');
+
+  // Exercise the function
+  const script = createScript();
+  script.add('echo "createScript test"');
+  console.log('createScript() returned a Script with', script.getStepCount(), 'step(s)');
+
+  console.log('<- executed ./src/script/createScript.ts');
+}

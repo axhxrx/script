@@ -1,3 +1,4 @@
+import process from 'node:process';
 import { runQuiet } from '../sh/index.ts';
 
 /**
@@ -15,4 +16,15 @@ import { runQuiet } from '../sh/index.ts';
 export function getGitConfig(key: string, cwd: string): string
 {
   return runQuiet(`git config "${key}"`, cwd);
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/git/getConfig.ts');
+
+  // Exercise the function with a safe read-only operation
+  const userName = getGitConfig('user.name', process.cwd());
+  console.log('git user.name:', userName || '(not set)');
+
+  console.log('<- executed ./src/git/getConfig.ts');
 }

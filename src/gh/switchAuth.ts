@@ -27,3 +27,10 @@ export function switchGhAuth(): boolean
     return false;
   }
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/gh/switchAuth.ts');
+  console.log('switchGhAuth function exported (mutates gh auth, not running in self-test)');
+  console.log('<- executed ./src/gh/switchAuth.ts');
+}

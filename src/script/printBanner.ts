@@ -10,3 +10,13 @@ export function printBanner(text: string): void
   console.log(`║ ${text} ║`);
   console.log(`${line}\n`);
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/printBanner.ts');
+
+  // Exercise the function
+  printBanner('Test Banner');
+
+  console.log('<- executed ./src/script/printBanner.ts');
+}

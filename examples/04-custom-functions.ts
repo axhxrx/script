@@ -1,17 +1,21 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 /**
 Example showing custom async functions instead of shell commands.
 
 You can pass async functions to add() for complex logic that can't be expressed as a simple shell command.
 */
 
-import { add, banner, execute, run, runQuiet } from '../src/sh/index.ts';
+import process from 'node:process';
+
+import { add, banner, execute, runQuiet } from '@axhxrx/script';
 
 banner('🔍 Git Branch Manager');
 
 // Using a custom function for complex logic
 add(async () =>
 {
+  await Promise.resolve();
+
   const currentBranch = runQuiet('git branch --show-current').trim();
   console.log(`  Currently on branch: ${currentBranch}`);
 
@@ -28,6 +32,8 @@ add(async () =>
 // Another custom function that uses conditionals
 add(async () =>
 {
+  await Promise.resolve();
+
   const status = runQuiet('git status --porcelain');
 
   if (status.trim() === '')
@@ -49,7 +55,7 @@ const result = await execute();
 if (result.aborted)
 {
   console.error('Script was aborted!');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 console.log(`Done! Ran ${result.stepsRun} steps.`);

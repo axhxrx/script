@@ -1,11 +1,14 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 /**
 Example showing how to create isolated Script instances.
 
 Use createScript() when you need multiple independent scripts, or for testing where you don't want to affect global state.
 */
 
-import { createScript } from '../src/sh/index.ts';
+import * as readline from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
+
+import { createScript } from '@axhxrx/script';
 
 // Create two isolated script instances
 const buildScript = createScript();
@@ -27,7 +30,9 @@ console.log('1. Build');
 console.log('2. Test');
 console.log('3. Both\n');
 
-const choice = prompt('Enter choice (1-3):');
+const rl = readline.createInterface({ input: stdin, output: stdout });
+const choice = await rl.question('Enter choice (1-3): ');
+rl.close();
 
 switch (choice)
 {

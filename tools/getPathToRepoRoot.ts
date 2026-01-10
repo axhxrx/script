@@ -14,9 +14,7 @@ export function getPathToRepoRoot(...subpathComponents: string[]): string
   // Navigate up from `./tools` to repo root
   const repoRoot = join(currentDir, '..');
 
-  const result = subpathComponents.length > 0
-    ? join(repoRoot, ...subpathComponents)
-    : repoRoot;
+  const result = subpathComponents.length > 0 ? join(repoRoot, ...subpathComponents) : repoRoot;
 
   return result;
 }

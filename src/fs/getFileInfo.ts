@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
+import process from 'node:process';
 
 /**
  Result type for `getFileInfo()`.
  */
-export interface FileInfo {
+export interface FileInfo
+{
   name: string;
   content: string;
   hash: string;
@@ -16,7 +18,8 @@ export interface FileInfo {
 
  @throws {Error} If the file does not exist or is not a file or is not readable.
  */
-export function getFileInfo(filePath: string): FileInfo {
+export function getFileInfo(filePath: string): FileInfo
+{
   const content = readFileSync(filePath, 'utf-8');
   const hash = createHash('sha256').update(content).digest('hex');
 
@@ -25,4 +28,21 @@ export function getFileInfo(filePath: string): FileInfo {
     content,
     hash,
   };
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/fs/getFileInfo.ts');
+
+  const filePath = process.argv[2];
+  if (!filePath)
+  {
+    console.error('Usage: getFileInfo <filePath>');
+    process.exit(1);
+  }
+
+  const fileInfo = getFileInfo(filePath);
+  console.log(fileInfo);
+
+  console.log('<- executed ./src/fs/getFileInfo.ts');
 }

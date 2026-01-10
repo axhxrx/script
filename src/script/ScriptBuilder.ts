@@ -5,15 +5,19 @@ import type { Step } from './Step.ts';
  */
 export class ScriptBuilder
 {
-  constructor(private step: Step)
-  {}
+  #step: Step;
+
+  constructor(step: Step)
+  {
+    this.#step = step;
+  }
 
   /**
    Set a human-readable description for this step.
    */
   description(desc: string): this
   {
-    this.step.options.description = desc;
+    this.#step.options.description = desc;
     return this;
   }
 
@@ -22,7 +26,7 @@ export class ScriptBuilder
    */
   cwd(path: string): this
   {
-    this.step.options.cwd = path;
+    this.#step.options.cwd = path;
     return this;
   }
 
@@ -31,7 +35,7 @@ export class ScriptBuilder
    */
   interactive(value = true): this
   {
-    this.step.options.interactive = value;
+    this.#step.options.interactive = value;
     return this;
   }
 
@@ -40,7 +44,7 @@ export class ScriptBuilder
    */
   env(vars: Record<string, string>): this
   {
-    this.step.options.env = { ...this.step.options.env, ...vars };
+    this.#step.options.env = { ...this.#step.options.env, ...vars };
     return this;
   }
 
@@ -52,7 +56,7 @@ export class ScriptBuilder
    */
   onError(behavior: 'fail' | 'warn' | 'continue'): this
   {
-    this.step.options.onError = behavior;
+    this.#step.options.onError = behavior;
     return this;
   }
 
@@ -64,8 +68,8 @@ export class ScriptBuilder
    */
   confirm(question?: string, defaultYes = true): this
   {
-    this.step.options.confirmPrompt = question ?? 'Run this step?';
-    this.step.options.confirmDefault = defaultYes;
+    this.#step.options.confirmPrompt = question ?? 'Run this step?';
+    this.#step.options.confirmDefault = defaultYes;
     return this;
   }
 
@@ -78,7 +82,7 @@ export class ScriptBuilder
    */
   canSkip(value = true): this
   {
-    this.step.options.canSkip = value;
+    this.#step.options.canSkip = value;
     return this;
   }
 
@@ -93,8 +97,21 @@ export class ScriptBuilder
     description?: string,
   ): this
   {
-    this.step.options.validateFn = check;
-    this.step.options.validateDescription = description;
+    this.#step.options.validateFn = check;
+    this.#step.options.validateDescription = description;
     return this;
   }
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/ScriptBuilder.ts');
+
+  // Minimal exercise of the code
+  const mockStep: Step = { command: 'echo test', options: {} };
+  const builder = new ScriptBuilder(mockStep);
+  builder.description('test').cwd('/tmp');
+  console.log('ScriptBuilder created and configured successfully');
+
+  console.log('<- executed ./src/script/ScriptBuilder.ts');
 }

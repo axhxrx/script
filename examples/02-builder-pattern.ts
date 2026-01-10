@@ -1,11 +1,13 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 /**
 Example showing the builder pattern for configuring steps.
 
 The builder pattern allows you to chain configuration methods for more readable and maintainable scripts.
 */
 
-import { add, banner, execute } from '../src/sh/index.ts';
+import process from 'node:process';
+
+import { add, banner, execute } from '@axhxrx/script';
 
 banner('🚀 Build Process');
 
@@ -33,7 +35,7 @@ const result = await execute();
 if (result.aborted)
 {
   console.error('Build was aborted!');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 console.log(`Build completed! Ran ${result.stepsRun} steps.`);

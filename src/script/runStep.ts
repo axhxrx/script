@@ -3,7 +3,7 @@
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
-import { run } from '../sh/index.ts';
+import { run } from '../sh/run.ts';
 import type { Step } from './Step.ts';
 
 /**
@@ -80,4 +80,17 @@ export async function runStep(step: Step): Promise<void>
       throw error;
     }
   }
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/runStep.ts');
+
+  // Exercise the function with a simple step
+  const testStep: Step = { command: 'echo "runStep test"', options: {} };
+  runStep(testStep).then(() =>
+  {
+    console.log('runStep() completed successfully');
+    console.log('<- executed ./src/script/runStep.ts');
+  });
 }

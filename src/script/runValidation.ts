@@ -41,3 +41,16 @@ export async function runValidation(
     };
   }
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/runValidation.ts');
+
+  // Exercise the function with a test validation
+  const testValidation = { description: 'test', check: () => true };
+  runValidation(testValidation).then((result) =>
+  {
+    console.log('runValidation() passed:', result.passed);
+    console.log('<- executed ./src/script/runValidation.ts');
+  });
+}

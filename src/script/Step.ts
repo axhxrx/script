@@ -10,3 +10,10 @@ export interface Step
   fn?: StepFn;
   options: StepOptions;
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/Step.ts');
+  console.log('Exported types: Step');
+  console.log('<- executed ./src/script/Step.ts');
+}

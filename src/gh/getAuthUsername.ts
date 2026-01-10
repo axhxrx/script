@@ -46,3 +46,14 @@ export function getGhAuthUsername(): string | null
     return null;
   }
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/gh/getAuthUsername.ts');
+
+  // Exercise the function (read-only)
+  const username = getGhAuthUsername();
+  console.log('GitHub auth username:', username || '(not authenticated)');
+
+  console.log('<- executed ./src/gh/getAuthUsername.ts');
+}

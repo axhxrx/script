@@ -58,3 +58,10 @@ export interface StepOptions
    */
   validateDescription?: string;
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/StepOptions.ts');
+  console.log('StepOptions interface exported (type-only module)');
+  console.log('<- executed ./src/script/StepOptions.ts');
+}

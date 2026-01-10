@@ -1,4 +1,5 @@
 import { stdin as input, stdout as output } from 'node:process';
+import process from 'node:process';
 import * as readline from 'node:readline/promises';
 
 /**
@@ -21,15 +22,32 @@ import * as readline from 'node:readline/promises';
 export async function promptForValue(
   prompt: string,
   defaultValue?: string,
-): Promise<string> {
+): Promise<string>
+{
   const rl = readline.createInterface({ input, output });
 
-  const fullPrompt = defaultValue
-    ? `${prompt} [${defaultValue}]: `
-    : `${prompt}: `;
+  const fullPrompt = defaultValue ? `${prompt} [${defaultValue}]: ` : `${prompt}: `;
 
   const answer = await rl.question(fullPrompt);
   rl.close();
 
   return answer.trim() || defaultValue || '';
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/prompts/promptForValue.ts');
+
+  // Skip interactive test if not a TTY
+  if (process.stdin.isTTY)
+  {
+    console.log('TTY detected - would prompt for value (skipping in self-test)');
+  }
+  else
+  {
+    console.log('No TTY - skipping interactive prompt');
+  }
+  console.log('promptForValue function exported successfully');
+
+  console.log('<- executed ./src/prompts/promptForValue.ts');
 }

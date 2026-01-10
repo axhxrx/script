@@ -18,3 +18,10 @@ export interface ExecuteOptions
    */
   confirmEach?: boolean;
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/ExecuteOptions.ts');
+  console.log('Exported types: ExecuteOptions');
+  console.log('<- executed ./src/script/ExecuteOptions.ts');
+}

@@ -55,9 +55,25 @@ import type { Validation } from './Validation.ts';
  */
 export class Script
 {
-  private steps: Step[] = [];
-  private validations: Validation[] = [];
-  private banners = new Map<number, string>();
+  /**
+   The global default Script instance. All module-level functions (`add`, `banner`, `validate`, `execute`, etc.) delegate to this instance.
+
+   For most use cases, you don't need to access this directly — just use the module-level functions. For advanced use cases (testing, conditional script selection), you can create your own instances of `Script`.
+   */
+  static #default: Script | undefined;
+
+  static get default(): Script
+  {
+    if (!this.#default)
+    {
+      this.#default = new Script();
+    }
+    return this.#default;
+  }
+
+  #steps: Step[] = [];
+  #validations: Validation[] = [];
+  #banners = new Map<number, string>();
 
   /**
    Add a command or function to the execution queue.
@@ -93,7 +109,7 @@ export class Script
     const step: Step = typeof commandOrFn === 'string'
       ? { command: commandOrFn, options: { canSkip: true, ...options } }
       : { fn: commandOrFn, options: { canSkip: true, ...options } };
-    this.steps.push(step);
+    this.#steps.push(step);
     return new ScriptBuilder(step);
   }
 
@@ -104,7 +120,7 @@ export class Script
    */
   banner(text: string): void
   {
-    this.banners.set(this.steps.length, text);
+    this.#banners.set(this.#steps.length, text);
   }
 
   /**
@@ -132,15 +148,15 @@ export class Script
     check: () => boolean | string | Promise<boolean | string>,
   ): void
   {
-    this.validations.push({ description, check });
+    this.#validations.push({ description, check });
   }
 
   /**
    Run all script-level validations. Returns true if all passed, false if any failed.
    */
-  private async runScriptValidations(): Promise<boolean>
+  async #runScriptValidations(): Promise<boolean>
   {
-    if (this.validations.length === 0)
+    if (this.#validations.length === 0)
     {
       return true;
     }
@@ -149,7 +165,7 @@ export class Script
 
     let allPassed = true;
 
-    for (const validation of this.validations)
+    for (const validation of this.#validations)
     {
       process.stdout.write(`  ○ ${validation.description}... `);
       const result = await runValidation(validation);
@@ -182,18 +198,18 @@ export class Script
   /**
    Print the accumulated plan without executing.
    */
-  private printPlan(header = '📋 Execution Plan'): void
+  #printPlan(header = '📋 Execution Plan'): void
   {
     console.log(`\n${header}\n`);
 
-    for (let i = 0; i < this.steps.length; i++)
+    for (let i = 0; i < this.#steps.length; i++)
     {
-      if (this.banners.has(i))
+      if (this.#banners.has(i))
       {
-        console.log(`\n  ── ${this.banners.get(i)} ──\n`);
+        console.log(`\n  ── ${this.#banners.get(i)} ──\n`);
       }
 
-      const step = this.steps[i];
+      const step = this.#steps[i];
       const desc = step.options.description || step.command || '[function step]';
       const flags: string[] = [];
 
@@ -233,12 +249,12 @@ export class Script
     }
 
     // Print any trailing banner
-    if (this.banners.has(this.steps.length))
+    if (this.#banners.has(this.#steps.length))
     {
-      console.log(`\n  ── ${this.banners.get(this.steps.length)} ──\n`);
+      console.log(`\n  ── ${this.#banners.get(this.#steps.length)} ──\n`);
     }
 
-    console.log(`\nTotal: ${this.steps.length} steps\n`);
+    console.log(`\nTotal: ${this.#steps.length} steps\n`);
   }
 
   /**
@@ -256,7 +272,7 @@ export class Script
       aborted: false,
     };
 
-    if (this.steps.length === 0)
+    if (this.#steps.length === 0)
     {
       console.log('\n📋 No steps to execute.\n');
       return result;
@@ -264,12 +280,12 @@ export class Script
 
     if (options.dryRun)
     {
-      this.printPlan('📋 Execution Plan (dry run)');
+      this.#printPlan('📋 Execution Plan (dry run)');
       return result;
     }
 
     // Run script-level validations before showing plan or doing anything
-    const validationsPassed = await this.runScriptValidations();
+    const validationsPassed = await this.#runScriptValidations();
     if (!validationsPassed)
     {
       result.aborted = true;
@@ -279,7 +295,7 @@ export class Script
     // Show plan and ask for confirmation unless --yes was passed
     if (!options.yes)
     {
-      this.printPlan();
+      this.#printPlan();
       const proceed = await ask('Proceed with execution?', true);
       if (!proceed)
       {
@@ -290,16 +306,16 @@ export class Script
     }
 
     result.executed = true;
-    console.log(`\n🚀 Executing ${this.steps.length} steps...\n`);
+    console.log(`\n🚀 Executing ${this.#steps.length} steps...\n`);
 
-    for (let i = 0; i < this.steps.length; i++)
+    for (let i = 0; i < this.#steps.length; i++)
     {
-      if (this.banners.has(i))
+      if (this.#banners.has(i))
       {
-        printBanner(this.banners.get(i)!);
+        printBanner(this.#banners.get(i)!);
       }
 
-      const step = this.steps[i];
+      const step = this.#steps[i];
 
       // Run step-level validation if present
       if (step.options.validateFn)
@@ -353,9 +369,9 @@ export class Script
     }
 
     // Print any trailing banner
-    if (this.banners.has(this.steps.length))
+    if (this.#banners.has(this.#steps.length))
     {
-      printBanner(this.banners.get(this.steps.length)!);
+      printBanner(this.#banners.get(this.#steps.length)!);
     }
 
     console.log('✅ All steps completed.\n');
@@ -367,9 +383,9 @@ export class Script
    */
   reset(): void
   {
-    this.steps = [];
-    this.validations = [];
-    this.banners.clear();
+    this.#steps = [];
+    this.#validations = [];
+    this.#banners.clear();
   }
 
   /**
@@ -377,6 +393,19 @@ export class Script
    */
   getStepCount(): number
   {
-    return this.steps.length;
+    return this.#steps.length;
   }
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/Script.ts');
+
+  // Exercise the class
+  const script = new Script();
+  script.banner('Self-test banner');
+  script.add('echo "Script class test"');
+  console.log('Script created with', script.getStepCount(), 'step(s)');
+
+  console.log('<- executed ./src/script/Script.ts');
 }

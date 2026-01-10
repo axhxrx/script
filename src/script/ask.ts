@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
 
+import process from 'node:process';
+
 import { promptYesNo } from '../prompts/index.ts';
 
 /**
@@ -26,4 +28,21 @@ export async function ask(
     return alreadyAnswered;
   }
   return await promptYesNo(question, defaultYes);
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/ask.ts');
+
+  if (process.stdin.isTTY)
+  {
+    console.log('TTY detected - would prompt (skipping in self-test)');
+  }
+  else
+  {
+    console.log('Skipping interactive test (not a TTY)');
+  }
+  console.log('ask function exported successfully');
+
+  console.log('<- executed ./src/script/ask.ts');
 }

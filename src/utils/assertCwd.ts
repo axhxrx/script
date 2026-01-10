@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 /**
  Assert that we're in the expected directory before dangerous operations.
 
@@ -12,7 +14,6 @@
  assertCwd('/path/to/clone', 'run git reset --hard');
  ```
  */
-import process from 'node:process';
 export function assertCwd(
   expectedPath: string,
   operation: string,
@@ -26,4 +27,22 @@ export function assertCwd(
         + `Refusing to ${operation}.`,
     );
   }
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/utils/assertCwd.ts');
+
+  // Test with current directory (should pass)
+  try
+  {
+    assertCwd(process.cwd(), 'self-test');
+    console.log('assertCwd function works correctly');
+  }
+  catch (_e)
+  {
+    console.log('assertCwd threw as expected for wrong cwd');
+  }
+
+  console.log('<- executed ./src/utils/assertCwd.ts');
 }

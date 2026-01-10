@@ -23,3 +23,20 @@ export async function requireYes(
     process.exit(1);
   }
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/requireYes.ts');
+
+  if (process.stdin.isTTY)
+  {
+    console.log('TTY detected - would require yes (skipping in self-test)');
+  }
+  else
+  {
+    console.log('Skipping interactive test (not a TTY)');
+  }
+  console.log('requireYes function exported successfully');
+
+  console.log('<- executed ./src/script/requireYes.ts');
+}

@@ -13,3 +13,10 @@ export interface Validation
    */
   check: () => boolean | string | Promise<boolean | string>;
 }
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/script/Validation.ts');
+  console.log('Exported types: Validation');
+  console.log('<- executed ./src/script/Validation.ts');
+}

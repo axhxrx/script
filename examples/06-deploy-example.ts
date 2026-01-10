@@ -1,11 +1,13 @@
-#!/usr/bin/env -S deno run -A
+#!/usr/bin/env bun
 /**
 A more realistic example: a deployment script with validations, confirmations, and multiple steps.
 
 This demonstrates how Script can be used for real-world automation tasks.
 */
 
-import { add, banner, execute, runQuiet, validate } from '../src/sh/index.ts';
+import process from 'node:process';
+
+import { add, banner, execute, runQuiet, validate } from '@axhxrx/script';
 
 const DEPLOY_BRANCH = 'main';
 
@@ -64,7 +66,7 @@ add('echo "Step 5: Sending notifications..."')
   .description('Notify team');
 
 // Execute with dry-run support
-const args = Deno.args;
+const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 
 if (dryRun)
@@ -77,7 +79,7 @@ const result = await execute({ dryRun });
 if (result.aborted)
 {
   console.error('\n❌ Deployment was aborted!');
-  Deno.exit(1);
+  process.exit(1);
 }
 
 console.log(`\n✅ Deployment completed! Ran ${result.stepsRun} steps.`);

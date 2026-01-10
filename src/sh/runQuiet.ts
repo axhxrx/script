@@ -14,6 +14,18 @@ import { run } from './run.ts';
  const username = runQuiet('whoami');
  ```
  */
-export function runQuiet(knownSafeCommand: string, cwd?: string): string {
+export function runQuiet(knownSafeCommand: string, cwd?: string): string
+{
   return run(knownSafeCommand, { cwd, silent: true });
+}
+
+if (import.meta.main)
+{
+  console.log('-> executing ./src/sh/runQuiet.ts');
+
+  // Exercise the function with a safe command
+  const result = runQuiet('echo "runQuiet test"');
+  console.log('runQuiet() returned:', result.trim());
+
+  console.log('<- executed ./src/sh/runQuiet.ts');
 }
