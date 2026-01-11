@@ -27,7 +27,7 @@ export function assertCwd(
   {
     expectedDir = realpathSync(expectedPath);
   }
-  catch (error: unknown)
+  catch (_error: unknown)
   {
     // Expected path doesn't exist - definitely not where we should be
     throw new Error(

@@ -7,21 +7,29 @@ export interface RunOptions
 }
 
 /**
- Run a shell command with `execSync() and return the output, or throw on error.
+ Run a shell command with real-time output streaming via `execSync()`.
+
+ By default, output streams directly to the terminal (stdout/stderr inherited). This provides real-time feedback for long-running commands. The return value is empty in this mode since output goes directly to the terminal.
+
+ Use `silent: true` to capture output instead of streaming it. In silent mode, output is captured and returned (or empty string on error, without throwing).
+
+ For a simpler API when you just want to capture output, use `runQuiet()` instead.
 
  @param knownSafeCommand - The shell command to run. Obviously, don't pass user input, as it will be directly executed.
  @param options - Run options
- @returns The command output as a trimmed string
+ @returns Empty string in default mode (output streams to terminal), or captured output in silent mode
  @throws Error if the command fails and silent mode is not enabled
 
  @example
  ```ts
- const output = run('git status');
- ```
+ // Real-time output to terminal (returns '')
+ run('npm install');
 
- @example
- ```ts
- const output = run('ls -la', { cwd: '/tmp', silent: true });
+ // Capture output silently
+ const output = run('git status', { silent: true });
+
+ // Or use runQuiet() for capturing:
+ const version = runQuiet('node --version');
  ```
  */
 export function run(
@@ -38,7 +46,7 @@ export function run(
     });
     return typeof result === 'string' ? result.trim() : '';
   }
-  catch (error)
+  catch (error: unknown)
   {
     if (!options.silent)
     {
@@ -52,13 +60,14 @@ if (import.meta.main)
 {
   console.log('-> executing ./src/sh/run.ts');
 
-  // Exercise the function with a safe command (uses stdio: 'inherit' by default)
-  const nonSilentModeResult = run('echo "run.ts test passed"');
-  console.log('run() with non-silent mode:', nonSilentModeResult);
+  // Default mode: output streams to terminal, returns ''
+  console.log('Running with inherit (output streams directly):');
+  const inheritResult = run('echo "run.ts test - this streams to terminal"');
+  console.log('Return value (empty because output went to terminal):', JSON.stringify(inheritResult));
 
-  // Also test silent mode which captures output
+  // Silent mode: output captured and returned
   const captured = run('echo "silent mode test"', { silent: true });
-  console.log('run() with silent mode captured:', captured);
+  console.log('run() with silent mode returned:', JSON.stringify(captured));
 
   console.log('<- executed ./src/sh/run.ts');
 }
