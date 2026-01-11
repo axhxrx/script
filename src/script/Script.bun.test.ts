@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import process from 'node:process';
 
 import { Script } from './Script.ts';
 
@@ -191,5 +192,97 @@ describe('ScriptBuilder applies options to all split steps', () =>
     `).description('My steps');
 
     expect(script.getStepCount()).toBe(2);
+  });
+});
+
+describe('Script.execute() with parseArgs', () =>
+{
+  // Save original argv to restore after tests
+  let originalArgv: string[];
+
+  beforeEach(() =>
+  {
+    originalArgv = [...process.argv];
+  });
+
+  afterEach(() =>
+  {
+    process.argv = originalArgv;
+  });
+
+  test('parseArgs: true reads --dry-run from process.argv', async () =>
+  {
+    const script = new Script();
+    script.add('echo test');
+
+    // Simulate: ./script.ts --dry-run
+    process.argv = ['node', 'script.ts', '--dry-run'];
+
+    const result = await script.execute({ parseArgs: true });
+
+    // Should be a dry run (no execution, plan printed)
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('parseArgs: true reads --dryRun from process.argv', async () =>
+  {
+    const script = new Script();
+    script.add('echo test');
+
+    // Simulate: ./script.ts --dryRun
+    process.argv = ['node', 'script.ts', '--dryRun'];
+
+    const result = await script.execute({ parseArgs: true });
+
+    // Should be a dry run
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('explicit dryRun: false overrides --dry-run from argv', async () =>
+  {
+    const script = new Script();
+    script.add('echo test');
+
+    // Simulate: ./script.ts --dry-run
+    process.argv = ['node', 'script.ts', '--dry-run'];
+
+    // Explicit option should override
+    const result = await script.execute({ parseArgs: true, dryRun: false, yes: true });
+
+    // Should have executed (not a dry run because explicit option overrides)
+    expect(result.executed).toBe(true);
+    expect(result.stepsRun).toBe(1);
+  });
+
+  test('explicit dryRun: true works without parseArgs', async () =>
+  {
+    const script = new Script();
+    script.add('echo test');
+
+    process.argv = ['node', 'script.ts']; // No flags
+
+    const result = await script.execute({ dryRun: true });
+
+    // Should be a dry run
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('parseArgs: false (default) ignores process.argv', async () =>
+  {
+    const script = new Script();
+    script.add('echo test');
+
+    // Simulate: ./script.ts --dry-run
+    process.argv = ['node', 'script.ts', '--dry-run'];
+
+    // parseArgs not set, so argv should be ignored
+    const result = await script.execute({ yes: true }); // Need yes: true to skip prompt
+
+    // Should have executed (argv ignored)
+    expect(result.executed).toBe(true);
+    expect(result.stepsRun).toBe(1);
   });
 });

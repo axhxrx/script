@@ -5,6 +5,7 @@ import process from 'node:process';
 import { ask } from './ask.ts';
 import type { ExecuteOptions } from './ExecuteOptions.ts';
 import type { ExecuteResult } from './ExecuteResult.ts';
+import { parseScriptArgs } from './parseScriptArgs.ts';
 import { printBanner } from './printBanner.ts';
 import { runStep } from './runStep.ts';
 import { runValidation } from './runValidation.ts';
@@ -340,6 +341,17 @@ export class Script
    */
   async execute(options: ExecuteOptions = {}): Promise<ExecuteResult>
   {
+    // Merge parsed args with explicit options (explicit options always win)
+    let dryRun = options.dryRun;
+    let yes = options.yes;
+
+    if (options.parseArgs)
+    {
+      const parsed = parseScriptArgs();
+      dryRun = options.dryRun ?? parsed.dryRun;
+      yes = options.yes ?? parsed.yes;
+    }
+
     const result: ExecuteResult = {
       executed: false,
       stepsRun: 0,
@@ -353,7 +365,7 @@ export class Script
       return result;
     }
 
-    if (options.dryRun)
+    if (dryRun)
     {
       this.#printPlan('📋 Execution Plan (dry run)');
       return result;
@@ -368,7 +380,7 @@ export class Script
     }
 
     // Show plan and ask for confirmation unless --yes was passed
-    if (!options.yes)
+    if (!yes)
     {
       this.#printPlan();
       const proceed = await ask('Proceed with execution?', true);
