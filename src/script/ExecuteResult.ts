@@ -4,7 +4,7 @@
 export interface ExecuteResult
 {
   /**
-   Whether any steps were actually executed.
+   Whether any steps were actually executed (at least one step completed).
    */
   executed: boolean;
 
@@ -19,9 +19,14 @@ export interface ExecuteResult
   stepsSkipped: number;
 
   /**
-   Whether the user aborted before execution.
+   Whether execution was stopped early (user cancellation, validation failure, or step error with onError: 'fail').
    */
   aborted: boolean;
+
+  /**
+   If a step threw an error (onError: 'fail'), the error is captured here. This allows callers to inspect the error while still having access to partial execution results (stepsRun, stepsSkipped, etc.).
+   */
+  error?: Error;
 }
 
 if (import.meta.main)

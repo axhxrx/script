@@ -380,7 +380,6 @@ export class Script
       }
     }
 
-    result.executed = true;
     console.log(`\n🚀 Executing ${this.#steps.length} steps...\n`);
 
     for (let i = 0; i < this.#steps.length; i++)
@@ -439,8 +438,19 @@ export class Script
         }
       }
 
-      await runStep(step);
-      result.stepsRun++;
+      try
+      {
+        await runStep(step);
+        result.stepsRun++;
+        result.executed = true; // Only true after at least one step completes
+      }
+      catch (error: unknown)
+      {
+        // Capture the error so callers can inspect it while still having access to partial results
+        result.error = error instanceof Error ? error : new Error(String(error));
+        result.aborted = true;
+        return result;
+      }
     }
 
     // Print any trailing banner
