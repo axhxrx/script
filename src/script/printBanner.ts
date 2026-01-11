@@ -25,11 +25,11 @@ function getDisplayWidth(text: string): number
 
     // Zero-width characters (modifiers that combine with previous char)
     if (
-      (code >= 0x1F3FB && code <= 0x1F3FF) || // Skin tone modifiers
-      (code >= 0xFE00 && code <= 0xFE0F) ||   // Variation selectors
-      code === 0x200D ||                       // Zero Width Joiner (ZWJ)
-      code === 0x200B ||                       // Zero Width Space
-      (code >= 0x0300 && code <= 0x036F)       // Combining diacritical marks
+      (code >= 0x1F3FB && code <= 0x1F3FF) // Skin tone modifiers
+      || (code >= 0xFE00 && code <= 0xFE0F) // Variation selectors
+      || code === 0x200D // Zero Width Joiner (ZWJ)
+      || code === 0x200B // Zero Width Space
+      || (code >= 0x0300 && code <= 0x036F) // Combining diacritical marks
     )
     {
       // These don't add to display width
@@ -38,25 +38,25 @@ function getDisplayWidth(text: string): number
 
     // Emoji ranges (simplified - covers most common emoji)
     if (
-      (code >= 0x1F300 && code <= 0x1F9FF) || // Misc Symbols, Emoticons, etc.
-      (code >= 0x2600 && code <= 0x26FF) ||   // Misc Symbols
-      (code >= 0x2700 && code <= 0x27BF) ||   // Dingbats
-      (code >= 0x1F600 && code <= 0x1F64F) || // Emoticons
-      (code >= 0x1F680 && code <= 0x1F6FF) || // Transport/Map
-      (code >= 0x1F1E0 && code <= 0x1F1FF)    // Flags (regional indicators)
+      (code >= 0x1F300 && code <= 0x1F9FF) // Misc Symbols, Emoticons, etc.
+      || (code >= 0x2600 && code <= 0x26FF) // Misc Symbols
+      || (code >= 0x2700 && code <= 0x27BF) // Dingbats
+      || (code >= 0x1F600 && code <= 0x1F64F) // Emoticons
+      || (code >= 0x1F680 && code <= 0x1F6FF) // Transport/Map
+      || (code >= 0x1F1E0 && code <= 0x1F1FF) // Flags (regional indicators)
     )
     {
       width += 2;
     }
     // CJK and Japanese kana ranges
     else if (
-      (code >= 0x4E00 && code <= 0x9FFF) ||   // CJK Unified Ideographs
-      (code >= 0x3400 && code <= 0x4DBF) ||   // CJK Extension A
-      (code >= 0x3000 && code <= 0x303F) ||   // CJK Punctuation
-      (code >= 0x3040 && code <= 0x309F) ||   // Hiragana
-      (code >= 0x30A0 && code <= 0x30FF) ||   // Katakana
-      (code >= 0xFF00 && code <= 0xFFEF) ||   // Fullwidth Forms
-      (code >= 0xAC00 && code <= 0xD7AF)      // Hangul Syllables
+      (code >= 0x4E00 && code <= 0x9FFF) // CJK Unified Ideographs
+      || (code >= 0x3400 && code <= 0x4DBF) // CJK Extension A
+      || (code >= 0x3000 && code <= 0x303F) // CJK Punctuation
+      || (code >= 0x3040 && code <= 0x309F) // Hiragana
+      || (code >= 0x30A0 && code <= 0x30FF) // Katakana
+      || (code >= 0xFF00 && code <= 0xFFEF) // Fullwidth Forms
+      || (code >= 0xAC00 && code <= 0xD7AF) // Hangul Syllables
     )
     {
       width += 2;
@@ -87,18 +87,18 @@ if (import.meta.main)
 
   // Test getDisplayWidth calculations
   const testCases: Array<[string, number]> = [
-    ['hello', 5],                    // ASCII: 5 chars = 5 width
-    ['🚀', 2],                       // Single emoji = 2 width
-    ['🚀🎉', 4],                     // Two emoji = 4 width
-    ['日本語', 6],                   // 3 CJK ideographs = 6 width
-    ['テスト', 6],                   // 3 Katakana = 6 width
-    ['ひらがな', 8],                 // 4 Hiragana = 8 width
-    ['👩🏻', 2],                      // Woman + skin tone = 2 width (modifier is 0)
-    ['👨🏽‍💻', 4],                     // Man + skin + ZWJ + laptop = 4 width (ZWJ is 0)
-    ['hello🚀', 7],                  // 5 ASCII + 1 emoji = 7 width
-    ['A你B', 4],                     // 2 ASCII + 1 CJK = 4 width
-    ['', 0],                         // Empty string = 0 width
-    ['Mix: 你好 🎉 World', 18],      // 11 ASCII + 2 CJK + 1 emoji + spaces
+    ['hello', 5], // ASCII: 5 chars = 5 width
+    ['🚀', 2], // Single emoji = 2 width
+    ['🚀🎉', 4], // Two emoji = 4 width
+    ['日本語', 6], // 3 CJK ideographs = 6 width
+    ['テスト', 6], // 3 Katakana = 6 width
+    ['ひらがな', 8], // 4 Hiragana = 8 width
+    ['👩🏻', 2], // Woman + skin tone = 2 width (modifier is 0)
+    ['👨🏽‍💻', 4], // Man + skin + ZWJ + laptop = 4 width (ZWJ is 0)
+    ['hello🚀', 7], // 5 ASCII + 1 emoji = 7 width
+    ['A你B', 4], // 2 ASCII + 1 CJK = 4 width
+    ['', 0], // Empty string = 0 width
+    ['Mix: 你好 🎉 World', 18], // 11 ASCII + 2 CJK + 1 emoji + spaces
   ];
 
   let passed = 0;

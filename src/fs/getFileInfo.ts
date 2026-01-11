@@ -34,8 +34,8 @@ export function getFileInfo(filePath: string, maxSize = DEFAULT_MAX_FILE_SIZE): 
   if (stats.size > maxSize)
   {
     throw new Error(
-      `File too large: ${stats.size} bytes exceeds limit of ${maxSize} bytes. ` +
-      `Pass a larger maxSize parameter to override.`,
+      `File too large: ${stats.size} bytes exceeds limit of ${maxSize} bytes. `
+        + `Pass a larger maxSize parameter to override.`,
     );
   }
 

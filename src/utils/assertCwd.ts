@@ -31,18 +31,18 @@ export function assertCwd(
   {
     // Expected path doesn't exist - definitely not where we should be
     throw new Error(
-      `SAFETY CHECK FAILED: Expected path "${expectedPath}" does not exist. ` +
-      `Currently in "${process.cwd()}" (resolved: "${currentDir}"). ` +
-      `Refusing to ${operation}.`,
+      `SAFETY CHECK FAILED: Expected path "${expectedPath}" does not exist. `
+        + `Currently in "${process.cwd()}" (resolved: "${currentDir}"). `
+        + `Refusing to ${operation}.`,
     );
   }
 
   if (currentDir !== expectedDir)
   {
     throw new Error(
-      `SAFETY CHECK FAILED: Expected to be in "${expectedPath}" (resolved: "${expectedDir}") ` +
-      `but we're in "${process.cwd()}" (resolved: "${currentDir}"). ` +
-      `Refusing to ${operation}.`,
+      `SAFETY CHECK FAILED: Expected to be in "${expectedPath}" (resolved: "${expectedDir}") `
+        + `but we're in "${process.cwd()}" (resolved: "${currentDir}"). `
+        + `Refusing to ${operation}.`,
     );
   }
 }
