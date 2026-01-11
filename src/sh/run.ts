@@ -1,9 +1,11 @@
 import { execSync } from 'node:child_process';
+import process from 'node:process';
 
 export interface RunOptions
 {
   cwd?: string;
   silent?: boolean;
+  env?: Record<string, string>;
 }
 
 /**
@@ -43,6 +45,7 @@ export function run(
       cwd: options.cwd,
       encoding: 'utf-8',
       stdio: options.silent ? 'pipe' : 'inherit',
+      env: options.env ? { ...process.env, ...options.env } : undefined,
     });
     return typeof result === 'string' ? result.trim() : '';
   }

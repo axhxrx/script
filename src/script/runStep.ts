@@ -57,7 +57,7 @@ export async function runStep(step: Step): Promise<void>
       else
       {
         // Use exec for non-interactive commands
-        run(command, { cwd: options.cwd });
+        run(command, { cwd: options.cwd, env: options.env });
       }
     }
 
