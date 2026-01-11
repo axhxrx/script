@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { basename } from 'node:path';
 import process from 'node:process';
 
@@ -11,15 +11,32 @@ export interface FileInfo
   name: string;
   content: string;
   hash: string;
+  size: number;
 }
 
 /**
- Get FileInfo for a given file path. Only works for files. Reads the entire file into memory and computes a SHA-256 hash, so not intended for large files. (We'll probably never need that, but if we do, implement it separately.)
-
- @throws {Error} If the file does not exist or is not a file or is not readable.
+ Default max file size: 1 GiB. This leaves headroom for typical CI environments like GitHub Actions (7.5GB RAM).
  */
-export function getFileInfo(filePath: string): FileInfo
+export const DEFAULT_MAX_FILE_SIZE = 1024 * 1024 * 1024;
+
+/**
+ Get FileInfo for a given file path. Only works for files. Reads the entire file into memory and computes a SHA-256 hash.
+
+ @param filePath - Path to the file
+ @param maxSize - Maximum file size in bytes (default: 1 GiB). Set to `Infinity` to disable the check.
+ @throws {Error} If the file does not exist, is not readable, or exceeds maxSize.
+ */
+export function getFileInfo(filePath: string, maxSize = DEFAULT_MAX_FILE_SIZE): FileInfo
 {
+  const stats = statSync(filePath);
+  if (stats.size > maxSize)
+  {
+    throw new Error(
+      `File too large: ${stats.size} bytes exceeds limit of ${maxSize} bytes. ` +
+      `Pass a larger maxSize parameter to override.`,
+    );
+  }
+
   const content = readFileSync(filePath, 'utf-8');
   const hash = createHash('sha256').update(content).digest('hex');
 
@@ -27,6 +44,7 @@ export function getFileInfo(filePath: string): FileInfo
     name: basename(filePath),
     content,
     hash,
+    size: stats.size,
   };
 }
 
