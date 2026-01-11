@@ -17,4 +17,4 @@ add(`
   dprint fmt **/*.ts
   `).onError('warn');
 
-execute();
+await execute();
