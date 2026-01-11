@@ -53,7 +53,8 @@ if (import.meta.main)
   console.log('-> executing ./src/sh/run.ts');
 
   // Exercise the function with a safe command (uses stdio: 'inherit' by default)
-  run('echo "run.ts test passed"');
+  const nonSilentModeResult = run('echo "run.ts test passed"');
+  console.log('run() with non-silent mode:', nonSilentModeResult);
 
   // Also test silent mode which captures output
   const captured = run('echo "silent mode test"', { silent: true });

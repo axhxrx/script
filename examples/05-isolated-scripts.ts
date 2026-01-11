@@ -5,8 +5,8 @@ Example showing how to create isolated Script instances.
 Use createScript() when you need multiple independent scripts, or for testing where you don't want to affect global state.
 */
 
-import * as readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import * as readline from 'node:readline/promises';
 
 import { createScript } from '@axhxrx/script';
 

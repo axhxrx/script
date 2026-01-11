@@ -2,31 +2,39 @@ import type { Step } from './Step.ts';
 
 /**
  Builder for configuring individual steps with a fluent API.
+
+ When constructed with multiple steps (from a multi-line add()), all builder methods apply to all steps.
  */
 export class ScriptBuilder
 {
-  #step: Step;
+  #steps: Step[];
 
-  constructor(step: Step)
+  constructor(steps: Step | Step[])
   {
-    this.#step = step;
+    this.#steps = Array.isArray(steps) ? steps : [steps];
   }
 
   /**
-   Set a human-readable description for this step.
+   Set a human-readable description for this step (or all steps if multi-line).
    */
   description(desc: string): this
   {
-    this.#step.options.description = desc;
+    for (const step of this.#steps)
+    {
+      step.options.description = desc;
+    }
     return this;
   }
 
   /**
-   Set the working directory for this step.
+   Set the working directory for this step (or all steps if multi-line).
    */
   cwd(path: string): this
   {
-    this.#step.options.cwd = path;
+    for (const step of this.#steps)
+    {
+      step.options.cwd = path;
+    }
     return this;
   }
 
@@ -35,16 +43,22 @@ export class ScriptBuilder
    */
   interactive(value = true): this
   {
-    this.#step.options.interactive = value;
+    for (const step of this.#steps)
+    {
+      step.options.interactive = value;
+    }
     return this;
   }
 
   /**
-   Set additional environment variables for this step.
+   Set additional environment variables for this step (or all steps if multi-line).
    */
   env(vars: Record<string, string>): this
   {
-    this.#step.options.env = { ...this.#step.options.env, ...vars };
+    for (const step of this.#steps)
+    {
+      step.options.env = { ...step.options.env, ...vars };
+    }
     return this;
   }
 
@@ -56,7 +70,10 @@ export class ScriptBuilder
    */
   onError(behavior: 'fail' | 'warn' | 'continue'): this
   {
-    this.#step.options.onError = behavior;
+    for (const step of this.#steps)
+    {
+      step.options.onError = behavior;
+    }
     return this;
   }
 
@@ -68,8 +85,11 @@ export class ScriptBuilder
    */
   confirm(question?: string, defaultYes = true): this
   {
-    this.#step.options.confirmPrompt = question ?? 'Run this step?';
-    this.#step.options.confirmDefault = defaultYes;
+    for (const step of this.#steps)
+    {
+      step.options.confirmPrompt = question ?? 'Run this step?';
+      step.options.confirmDefault = defaultYes;
+    }
     return this;
   }
 
@@ -82,7 +102,10 @@ export class ScriptBuilder
    */
   canSkip(value = true): this
   {
-    this.#step.options.canSkip = value;
+    for (const step of this.#steps)
+    {
+      step.options.canSkip = value;
+    }
     return this;
   }
 
@@ -97,8 +120,11 @@ export class ScriptBuilder
     description?: string,
   ): this
   {
-    this.#step.options.validateFn = check;
-    this.#step.options.validateDescription = description;
+    for (const step of this.#steps)
+    {
+      step.options.validateFn = check;
+      step.options.validateDescription = description;
+    }
     return this;
   }
 }

@@ -57,6 +57,24 @@ export interface StepOptions
    Human-readable description of the step validation.
    */
   validateDescription?: string;
+
+  /**
+   If true, treat multi-line command strings as a single shell command instead of splitting into separate steps per line.
+
+   By default, multi-line strings passed to `add()` are split into separate steps (one per non-empty, non-comment line (except that lines ending with '\' line continuation are combined with the next line, mimicking the shell's native behavior)). ⚠️ NOTE: Don't forget that in TypeScript, template strings treat "\" as an escape character,  so it's not really recommended to use them here.
+
+   Set this to `true` to preserve shell's native multi-line behavior.
+
+   @example
+   ```ts
+   // Creates ONE step that runs as a single shell command
+   add(`
+     echo "line 1"
+     echo "line 2"
+   `, { multiLine: true });
+   ```
+   */
+  multiLine?: boolean;
 }
 
 if (import.meta.main)
