@@ -22,7 +22,7 @@ export function switchGhAuth(): boolean
     run('gh auth switch', { silent: false });
     return true;
   }
-  catch
+  catch (_error: unknown)
   {
     return false;
   }

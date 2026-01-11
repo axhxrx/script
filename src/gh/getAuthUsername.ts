@@ -41,7 +41,7 @@ export function getGhAuthUsername(): string | null
     const singleMatch = status.match(/Logged in to \S+ as (\S+)/);
     return singleMatch ? singleMatch[1] : null;
   }
-  catch
+  catch (_error: unknown)
   {
     return null;
   }

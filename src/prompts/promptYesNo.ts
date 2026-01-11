@@ -22,15 +22,21 @@ export async function promptYesNo(
 ): Promise<boolean>
 {
   const rl = readline.createInterface({ input, output });
-  const suffix = defaultYes ? '[Y/n]' : '[y/N]';
-  const answer = await rl.question(`${prompt} ${suffix}: `);
-  rl.close();
-
-  if (!answer.trim())
+  try
   {
-    return defaultYes;
+    const suffix = defaultYes ? '[Y/n]' : '[y/N]';
+    const answer = await rl.question(`${prompt} ${suffix}: `);
+
+    if (!answer.trim())
+    {
+      return defaultYes;
+    }
+    return answer.toLowerCase().startsWith('y');
   }
-  return answer.toLowerCase().startsWith('y');
+  finally
+  {
+    rl.close();
+  }
 }
 
 if (import.meta.main)

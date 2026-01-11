@@ -25,13 +25,16 @@ export async function promptForValue(
 ): Promise<string>
 {
   const rl = readline.createInterface({ input, output });
-
-  const fullPrompt = defaultValue ? `${prompt} [${defaultValue}]: ` : `${prompt}: `;
-
-  const answer = await rl.question(fullPrompt);
-  rl.close();
-
-  return answer.trim() || defaultValue || '';
+  try
+  {
+    const fullPrompt = defaultValue ? `${prompt} [${defaultValue}]: ` : `${prompt}: `;
+    const answer = await rl.question(fullPrompt);
+    return answer.trim() || defaultValue || '';
+  }
+  finally
+  {
+    rl.close();
+  }
 }
 
 if (import.meta.main)
