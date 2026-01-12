@@ -1,6 +1,10 @@
 /* eslint-disable no-console */
 
 import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { readFile, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import type { Step } from './Step.ts';
@@ -18,7 +22,89 @@ export interface RunStepOptions
 }
 
 /**
- Run a command using spawn with real-time streaming and optional output capture.
+ Check if we're on a Unix-like platform (macOS, Linux, etc.)
+ */
+const isUnix = process.platform !== 'win32';
+
+/**
+ Create a unique temp file path for capturing output.
+ */
+function createTempPath(prefix: string): string
+{
+  return join(tmpdir(), `${prefix}-${randomUUID()}.log`);
+}
+
+/**
+ Run a command using Unix `tee` to stream output to terminal AND capture to temp files.
+
+ This is the preferred approach on Unix, but doesn't work on Windows, so we use a different approach (runCommandWithCapture) there.
+ */
+async function runCommandWithTee(
+  command: string,
+  options: { cwd?: string; env?: Record<string, string> },
+): Promise<{ exitCode: number; stdout: string; stderr: string }>
+{
+  const { writeFile } = await import('node:fs/promises');
+
+  const stdoutFile = createTempPath('script-stdout');
+  const stderrFile = createTempPath('script-stderr');
+
+  // Pre-create files to ensure they exist before tee tries to write
+  await writeFile(stdoutFile, '');
+  await writeFile(stderrFile, '');
+
+  // Use exec to redirect stdout/stderr to tee processes that write to files.
+  // The `wait` ensures tee processes complete before bash exits.
+  // Exit code is captured before wait (which returns 0).
+  const wrappedCmd = `
+exec > >(tee "${stdoutFile}") 2> >(tee "${stderrFile}" >&2)
+${command}
+__exit=$?
+wait
+exit $__exit
+`.trim();
+
+  return new Promise((resolve, reject) =>
+  {
+    const child = spawn('bash', ['-c', wrappedCmd], {
+      cwd: options.cwd,
+      env: { ...process.env, ...options.env },
+      stdio: 'inherit', // Pass through to terminal
+    });
+
+    child.on('close', async (code) =>
+    {
+      try
+      {
+        // Small delay to ensure tee has flushed to disk
+        await new Promise(r => setTimeout(r, 10));
+
+        // Read captured output from temp files
+        const stdout = await readFile(stdoutFile, 'utf-8').catch(() => '');
+        const stderr = await readFile(stderrFile, 'utf-8').catch(() => '');
+
+        // Clean up temp files (ignore errors if already deleted)
+        await unlink(stdoutFile).catch(() =>
+        {});
+        await unlink(stderrFile).catch(() =>
+        {});
+
+        resolve({ exitCode: code ?? 0, stdout, stderr });
+      }
+      catch (err)
+      {
+        reject(err);
+      }
+    });
+
+    child.on('error', reject);
+  });
+}
+
+/**
+ Run a command using spawn with real-time streaming and output capture.
+
+ This is the fallback implementation for Windows, where `tee` is not available. It use TextDecoder with streaming mode to handle UTF-8 multi-byte sequences that may span chunk boundaries.
  */
 function runCommandWithCapture(
   command: string,
@@ -33,25 +119,30 @@ function runCommandWithCapture(
       env: { ...process.env, ...options.env },
     });
 
+    const stdoutDecoder = new TextDecoder('utf-8', { fatal: false });
+    const stderrDecoder = new TextDecoder('utf-8', { fatal: false });
     let stdout = '';
     let stderr = '';
 
     child.stdout.on('data', (data: Uint8Array) =>
     {
-      const text = new TextDecoder().decode(data);
+      const text = stdoutDecoder.decode(data, { stream: true });
       process.stdout.write(text); // Stream to terminal
       stdout += text; // Capture
     });
 
     child.stderr.on('data', (data: Uint8Array) =>
     {
-      const text = new TextDecoder().decode(data);
+      const text = stderrDecoder.decode(data, { stream: true });
       process.stderr.write(text); // Stream to terminal
       stderr += text; // Capture
     });
 
     child.on('close', (code) =>
     {
+      // Flush any remaining bytes in the decoders
+      stdout += stdoutDecoder.decode(new Uint8Array(0));
+      stderr += stderrDecoder.decode(new Uint8Array(0));
       resolve({ exitCode: code ?? 0, stdout, stderr });
     });
 
@@ -133,8 +224,9 @@ export async function runStep(
       }
       else if (captureOutput)
       {
-        // Use spawn with stream capture for non-interactive commands
-        const result = await runCommandWithCapture(command, {
+        // Use platform-specific capture: tee on Unix, TextDecoder fallback on Windows
+        const captureCommand = isUnix ? runCommandWithTee : runCommandWithCapture;
+        const result = await captureCommand(command, {
           cwd: stepOptions.cwd,
           env: stepOptions.env,
         });

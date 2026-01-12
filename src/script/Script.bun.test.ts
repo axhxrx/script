@@ -391,3 +391,61 @@ describe('Script.execute() state and stepResults', () =>
     expect(capturedResults[0].description).toBe('echo first');
   });
 });
+
+describe('Script.execute() UTF-8 and special character handling', () =>
+{
+  test('captures multi-byte UTF-8 characters (emojis)', async () =>
+  {
+    const script = new Script();
+    script.add('echo "Hello 🎉🚀🌍"');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepResults[0].stdout).toBe('Hello 🎉🚀🌍\n');
+  });
+
+  test('captures CJK characters', async () =>
+  {
+    const script = new Script();
+    script.add('echo "日本語テスト 中文测试 한국어"');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepResults[0].stdout).toBe('日本語テスト 中文测试 한국어\n');
+  });
+
+  test('captures mixed ASCII and UTF-8', async () =>
+  {
+    const script = new Script();
+    script.add('echo "ASCII + émojis: 🎯 + café"');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepResults[0].stdout).toBe('ASCII + émojis: 🎯 + café\n');
+  });
+
+  test('captures stderr separately from stdout', async () =>
+  {
+    const script = new Script();
+    script.add('echo "stdout line" && echo "stderr line" >&2').onError('continue');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepResults[0].stdout).toContain('stdout line');
+    expect(result.stepResults[0].stderr).toContain('stderr line');
+  });
+
+  test('handles large output without truncation', async () =>
+  {
+    const script = new Script();
+    // Generate 1000 lines of output
+    script.add('for i in $(seq 1 1000); do echo "Line $i: some content here"; done');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    const lines = result.stepResults[0].stdout?.split('\n').filter(l => l) || [];
+    expect(lines.length).toBe(1000);
+    expect(lines[0]).toBe('Line 1: some content here');
+    expect(lines[999]).toBe('Line 1000: some content here');
+  });
+});
