@@ -37,6 +37,22 @@ export interface ExecuteOptions
    @default false
    */
   parseArgs?: boolean;
+
+  /**
+   Print a summary of execution results at the end. This summary is printed for both successful completion and error cases, showing step timings and any errors.
+
+   @default true
+   */
+  printResults?: boolean;
+
+  /**
+   Capture stdout/stderr from non-interactive command steps. When enabled, output is both streamed to the terminal in real-time AND captured in stepResults for later inspection.
+
+   Set to false to disable capture (slightly better performance, but stepResults won't have stdout/stderr).
+
+   @default true
+   */
+  captureOutput?: boolean;
 }
 
 if (import.meta.main)

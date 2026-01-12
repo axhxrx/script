@@ -1,4 +1,4 @@
-import { add, execute, Script } from '@axhxrx/script';
+import { Script } from '@axhxrx/script';
 
 const s = new Script();
 
@@ -11,5 +11,5 @@ s.add(() =>
   cuteness = performImageAnalysis('example.png');
   console.log(cuteness);
 });
-await s.execute({ yes: true });
+await s.execute({ parseArgs: true });
 console.log(s);
