@@ -6,7 +6,7 @@ let cuteness;
 s.add(`
   curl -o example.png https://httpbin.org/image/png
 `);
-s.add(() =>
+s.description(() =>
 {
   cuteness = performImageAnalysis('example.png');
   console.log(cuteness);
