@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { add, execute, Script } from '@axhxrx/script';
+import { Script } from '@axhxrx/script';
 
 // add('deno check');
 // add('deno lint');

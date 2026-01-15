@@ -13,6 +13,7 @@ import { ScriptBuilder } from './ScriptBuilder.ts';
 import type { Step } from './Step.ts';
 import type { StepFn } from './StepFn.ts';
 import type { StepOptions } from './StepOptions.ts';
+import type { StepResult } from './StepResult.ts';
 import type { Validation } from './Validation.ts';
 
 /**
@@ -123,6 +124,15 @@ export class Script
   #steps: Step[] = [];
   #validations: Validation[] = [];
   #banners = new Map<number, string>();
+  #stepResults: StepResult[] = [];
+
+  /**
+   Get the results of steps executed so far. Useful for step N to inspect results of step N-1.
+   */
+  getStepResults(): readonly StepResult[]
+  {
+    return [...this.#stepResults];
+  }
 
   /**
    Add a command or function to the execution queue.
@@ -352,22 +362,34 @@ export class Script
       yes = options.yes ?? parsed.yes;
     }
 
+    const printResults = options.printResults ?? true;
+    const captureOutput = options.captureOutput ?? true;
+
+    // Reset step results for this execution
+    this.#stepResults = [];
+
+    const startTime = Date.now();
+
     const result: ExecuteResult = {
       executed: false,
       stepsRun: 0,
       stepsSkipped: 0,
       aborted: false,
+      state: 'planning',
+      stepResults: [],
     };
 
     if (this.#steps.length === 0)
     {
       console.log('\n📋 No steps to execute.\n');
+      result.state = 'complete';
       return result;
     }
 
     if (dryRun)
     {
       this.#printPlan('📋 Execution Plan (dry run)');
+      result.state = 'complete';
       return result;
     }
 
@@ -376,6 +398,11 @@ export class Script
     if (!validationsPassed)
     {
       result.aborted = true;
+      result.state = 'failed';
+      if (printResults)
+      {
+        this.#printResultsSummary(result);
+      }
       return result;
     }
 
@@ -388,6 +415,11 @@ export class Script
       {
         console.log('\n❌ Aborted.\n');
         result.aborted = true;
+        result.state = 'failed';
+        if (printResults)
+        {
+          this.#printResultsSummary(result);
+        }
         return result;
       }
     }
@@ -402,6 +434,7 @@ export class Script
       }
 
       const step = this.#steps[i];
+      const stepDesc = step.options.description || step.command || '[function step]';
 
       // Run step-level validation if present
       if (step.options.validateFn)
@@ -422,6 +455,13 @@ export class Script
           }
           console.error('\n❌ Step validation failed.\n');
           result.aborted = true;
+          result.state = 'failed';
+          result.stepResults = [...this.#stepResults];
+          result.totalDurationMs = Date.now() - startTime;
+          if (printResults)
+          {
+            this.#printResultsSummary(result);
+          }
           return result;
         }
         console.log('✓');
@@ -431,7 +471,6 @@ export class Script
       const needsConfirm = options.confirmEach || step.options.confirmPrompt;
       if (needsConfirm)
       {
-        const stepDesc = step.options.description || step.command || '[function step]';
         const question = step.options.confirmPrompt || `Run: ${stepDesc}?`;
         const defaultYes = step.options.confirmDefault ?? true;
         const proceed = await ask(question, defaultYes);
@@ -442,9 +481,31 @@ export class Script
           {
             console.error('\n❌ Aborted (step cannot be skipped).');
             result.aborted = true;
+            result.state = 'failed';
+            result.stepResults = [...this.#stepResults];
+            result.totalDurationMs = Date.now() - startTime;
+            if (printResults)
+            {
+              this.#printResultsSummary(result);
+            }
             return result;
           }
           console.log('⏭️  Skipped.\n');
+
+          // Record skipped step
+          const now = new Date();
+          const skipResult: StepResult = {
+            index: i,
+            type: step.fn ? 'function' : step.options.interactive ? 'interactive' : 'command',
+            description: stepDesc,
+            command: step.command,
+            status: 'skipped',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 0,
+            skipReason: 'User declined confirmation',
+          };
+          this.#stepResults.push(skipResult);
           result.stepsSkipped++;
           continue;
         }
@@ -452,15 +513,30 @@ export class Script
 
       try
       {
-        await runStep(step);
+        const stepResult = await runStep(step, i, { captureOutput });
+        this.#stepResults.push(stepResult);
         result.stepsRun++;
         result.executed = true; // Only true after at least one step completes
       }
       catch (error: unknown)
       {
+        // Try to get stepResult from the error if runStep attached it
+        const errWithResult = error as Error & { stepResult?: StepResult };
+        if (errWithResult.stepResult)
+        {
+          this.#stepResults.push(errWithResult.stepResult);
+        }
+
         // Capture the error so callers can inspect it while still having access to partial results
         result.error = error instanceof Error ? error : new Error(String(error));
         result.aborted = true;
+        result.state = 'failed';
+        result.stepResults = [...this.#stepResults];
+        result.totalDurationMs = Date.now() - startTime;
+        if (printResults)
+        {
+          this.#printResultsSummary(result);
+        }
         return result;
       }
     }
@@ -471,8 +547,86 @@ export class Script
       printBanner(this.#banners.get(this.#steps.length)!);
     }
 
+    result.state = 'complete';
+    result.stepResults = [...this.#stepResults];
+    result.totalDurationMs = Date.now() - startTime;
+
     console.log('✅ All steps completed.\n');
+    if (printResults)
+    {
+      this.#printResultsSummary(result);
+    }
     return result;
+  }
+
+  /**
+   Format a duration in milliseconds for display.
+   */
+  #formatDuration(ms: number): string
+  {
+    if (ms < 1000)
+    {
+      return `${ms}ms`;
+    }
+    if (ms < 60000)
+    {
+      return `${(ms / 1000).toFixed(1)}s`;
+    }
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
+  }
+
+  /**
+   Print an execution summary.
+   */
+  #printResultsSummary(result: ExecuteResult): void
+  {
+    console.log('\n' + '─'.repeat(60));
+    console.log('📊 Execution Summary');
+    console.log('─'.repeat(60));
+
+    // Status line
+    const statusEmoji = result.state === 'complete' ? '✅' : '❌';
+    const statusText = result.state === 'complete' ? 'Completed' : 'Failed';
+    console.log(`\nStatus: ${statusEmoji} ${statusText}`);
+
+    // Stats
+    const statsLine = result.stepsSkipped > 0
+      ? `Steps: ${result.stepsRun} succeeded, ${result.stepsSkipped} skipped`
+      : `Steps: ${result.stepsRun} succeeded`;
+    console.log(statsLine);
+
+    if (result.totalDurationMs !== undefined)
+    {
+      console.log(`Duration: ${this.#formatDuration(result.totalDurationMs)}`);
+    }
+
+    // Step details
+    if (result.stepResults.length > 0)
+    {
+      console.log('\nStep Results:');
+      for (const sr of result.stepResults)
+      {
+        const statusIcon = sr.status === 'success'
+          ? '✓'
+          : sr.status === 'skipped'
+          ? '⏭️'
+          : sr.status === 'warning'
+          ? '⚠️'
+          : '✗';
+        const duration = sr.durationMs > 0 ? ` (${this.#formatDuration(sr.durationMs)})` : '';
+        console.log(`  ${statusIcon} ${sr.index + 1}. ${sr.description}${duration}`);
+      }
+    }
+
+    // Error details
+    if (result.error)
+    {
+      console.log(`\nError: ${result.error.message}`);
+    }
+
+    console.log('');
   }
 
   /**
@@ -483,6 +637,7 @@ export class Script
     this.#steps = [];
     this.#validations = [];
     this.#banners.clear();
+    this.#stepResults = [];
   }
 
   /**

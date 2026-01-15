@@ -1,20 +1,20 @@
 # @axhxrx/script
 
-This is a utility library for using TypeScript to replace shell scripts.
+This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as Bun Shell, but it works on any TypeScript runtime (even Node.js).
 
 ## Why shell scripts make you die
 
-Shell scripts ae great, until they suck. They're easy to get started with — just add some commands! But as soon as you need an `if` or a `loop` you begin the descent into madness. Five seconds later, you are staring at:
+Shell scripts are great, until they suck. They're easy to get started with — just add some commands! But as soon as you need an `if` or a `loop` you begin the descent into madness. Five seconds later, you are staring at:
 
 ```shell
 VAL=$(grep -o '"'"$1"'":"[^"]*"' file.json | sed 's/"'"$1"'":"\([^"]*\)"/\1/') && [ -n "$VAL" ] && export "$1"="$VAL" || export "$1"="${2:-$(cat /dev/stdin 2>/dev/null || echo '')}"
 ```
 
-Shell scripts are like baby pythons. Cute when little, but they live a long time, tend to keep growing, and finally crush you to death in your sleep.
+Shell scripts are like baby pythons. 🐍 Cute when little, but they tend to live a long time, keep growing, and finally crush you to death in your sleep and then swallow your corpse whole.
 
 ## So why not TypeScript?
 
-99% of shell scripts written since 2020 shouldn't have been. But old habits die hard. Also, even with Deno and Bun arriving on the scene, TypeScript isn't exactly pithy for scripts that mostly just execute commands.
+I **_know_**, right? 99.164% of shell scripts written since 2020 shouldn't have been. But old habits die hard. Also, runtime-agnostic TypeScript isn't exactly _pithy_ for scripts that mostly just execute commands.
 
 I mean, which is better:
 
@@ -25,21 +25,21 @@ hostname=$(hostname)
 vs
 
 ```typescript
+let hostname: string;
 try {
   const result = execSync("hostname", {
-    cwd: options.cwd,
     encoding: "utf-8",
     stdio: "pipe",
   });
-  return typeof result === "string" ? result.trim() : "";
+  hostname = result.trim();
 } catch (error: unknown) {
-  return "";
+  hostname = "";
 }
 ```
 
-You can pretty easily write a couple functions to make that more pleasant, but for the "zero to executing a couple shell commands", TypeScript hasn't always given us ergonmic ways to do it out of the box.
+You can easily write a couple functions to make that more pleasant, but for the "zero to executing a couple shell commands", TypeScript hasn't always given us ergonmic ways to do it out of the box.
 
-[Bun Shell](https://bun.com/docs/runtime/shell) is actually pretty great, and if you are OK with Bun only, it might be a better alternative to this library is.
+[Bun Shell](https://bun.com/docs/runtime/shell) is actually pretty great, and if you are OK with Bun-only, it's probably a better alternative to this library is.
 
 ## But this library is just modern TypeScript
 
@@ -76,6 +76,8 @@ await execute({ yes: true });
 Or, if you are a bona-fide O.G. radguy warez kingpin, and you love OOP:
 
 ```ts
+import { Script } from "@axhxrx/script";
+
 const s = new Script();
 s.add(`
   deno check
@@ -86,10 +88,95 @@ s.add(`
 await s.execute();
 ```
 
-That's gonna do just what you expect. But when you inevitably start to need conditional logic, both during execution and maybe also to _decide_ what to execute, there are a few more benefits.
+Those are all equivalent, and it's obvious at a glance what this script code will do.
+
+Before doing it, though, by default that code will confirm the plan before executing it:
+
+```shell
+📋 Execution Plan
+
+  1. deno check
+  2. deno lint
+  3. bun test
+  4. dprint fmt **/*.ts
+
+Total: 4 steps
+
+Proceed with execution? [Y/n]:
+```
+
+Use `execute({ yes: true });` to skip the confirmation. Or use `execute({parseArgs: true})` to use the built-in support for parsing `--yes` or `-y` from the command line args. (That also gives you automatic support for `--dry-run`)
+
+OK, fine. But the above still isn't really any better than this `bash` script:
+
+```bash
+deno check
+deno lint
+bun test
+dprint fmt **/*.ts
+```
+
+So, what's the point? Well, the benefits of this library start to make themselves apparent when you need to add conditional logic, both during execution and maybe also to _decide_ what to execute. Or add pre-flight validation steps. Or make some steps conditional based on the results of previous steps. Or support standard things like `--dry-run` or `-y` arguments.
+
+### if and else, pre-flight validation, and builder pattern
+
+```ts
+// add() just adds steps to the plan, they won
+// run until you call execute(). So you can use
+// if/else to conditionally add steps, without
+// ending up with partially executed steps.
+
+if (args.gcloudAuth) {
+  banner("🔐 AUTHENTICATE WITH GCLOUD");
+
+  // steps can be modified via builder-pattern methods:
+  add("gcloud auth login")
+      // User-friendly description shows up when executing
+    .description("Authenticate with gcloud")
+      // inherit stdin so the user can type in the auth code
+    .interactive()
+      // user might cancel this step, it's ok, don't quit
+    .onError("warn");
+       // set cwd for this step
+    .cwd('~')
+      // optional per-step confirmation for dangerous steps
+    .confirm("⚠️ May cause computer explosion. Are you sure?", true)
+      // should execution keep going even if confirm() answer is no?
+    .canSkip(true)
+      // Step-level validation executes right before the step is
+      // executed. This means it can depend on the results of
+      // previous steps. (Although that can mean partial execution.)
+    .validate(() => {
+      return doSomething();
+    });
+}
+
+// You can also schedule script-level validations any time before
+// calling execute(). All validations run before any steps
+// are executed. This is for pre-flight sanity-checking.
+validate(async () => {
+  const somebody = await mainScreenTurnOn();
+  return !somebody.seUpUsTheBomb; // we're good to go
+});
+```
+
+### use TypeScript functions interchangeably with shell commands
 
 ```ts
 
+```
+
+## Installation
+
+```bash
+# Bun
+bun add @axhxrx/script
+
+# npm/pnpm/yarn
+npm install @axhxrx/script
+
+# Deno
+deno add jsr:@axhxrx/script
 ```
 
 ## history
