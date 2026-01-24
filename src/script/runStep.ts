@@ -151,7 +151,86 @@ function runCommandWithCapture(
 }
 
 /**
- Run a single step (either a shell command or a function) and return a StepResult.
+ Run a single shell command (internal helper for runStep).
+ */
+async function runSingleCommand(
+  command: string,
+  stepOptions: Step['options'],
+  captureOutput: boolean,
+): Promise<{ exitCode: number; stdout?: string; stderr?: string }>
+{
+  if (stepOptions.interactive)
+  {
+    // Use spawnSync for interactive commands (browser auth flows, etc.)
+    // Cannot capture output because stdio: 'inherit' hands terminal to child
+    const result = spawnSync(command, {
+      stdio: 'inherit',
+      cwd: stepOptions.cwd,
+      shell: true,
+      env: { ...process.env, ...stepOptions.env },
+    });
+
+    return { exitCode: result.status ?? 0 };
+  }
+  else if (captureOutput)
+  {
+    // Use platform-specific capture: tee on Unix, TextDecoder fallback on Windows
+    const captureCommand = isUnix ? runCommandWithTee : runCommandWithCapture;
+    return await captureCommand(command, {
+      cwd: stepOptions.cwd,
+      env: stepOptions.env,
+    });
+  }
+  else
+  {
+    // No capture - use spawnSync with inherit (original behavior)
+    const result = spawnSync(command, {
+      stdio: 'inherit',
+      cwd: stepOptions.cwd,
+      shell: true,
+      env: { ...process.env, ...stepOptions.env },
+    });
+
+    return { exitCode: result.status ?? 0 };
+  }
+}
+
+/**
+ Get the description for a step.
+ */
+function getStepDescription(step: Step): string
+{
+  if (step.options.description)
+  {
+    return step.options.description;
+  }
+
+  if (step.commands.length === 0)
+  {
+    return '[empty step]';
+  }
+
+  const first = step.commands[0];
+  if (typeof first === 'string')
+  {
+    return step.commands.length === 1
+      ? first
+      : `[${step.commands.length} commands]`;
+  }
+
+  return '[function step]';
+}
+
+/**
+ Check if a step contains only functions (no shell commands).
+ */
+function isFunctionStep(step: Step): boolean
+{
+  return step.commands.length > 0 && step.commands.every(cmd => typeof cmd === 'function');
+}
+
+/**
+ Run a single step (mixed commands array of shell commands and functions) and return a StepResult.
 
  @param step - The step to run
  @param index - The index of this step in the script (0-based)
@@ -164,17 +243,36 @@ export async function runStep(
   options: RunStepOptions = {},
 ): Promise<StepResult>
 {
-  const { command, fn, options: stepOptions } = step;
-  const desc = stepOptions.description || command || '[function step]';
+  const { commands, options: stepOptions } = step;
+
+  // Build description
+  const desc = getStepDescription(step);
+
   const captureOutput = options.captureOutput ?? true;
 
   // Determine step type
-  const type: StepType = fn ? 'function' : stepOptions.interactive ? 'interactive' : 'command';
+  const type: StepType = isFunctionStep(step)
+    ? 'function'
+    : stepOptions.interactive
+    ? 'interactive'
+    : 'command';
 
   console.log(`▶ ${desc}`);
-  if (command && stepOptions.description)
+
+  // Show individual commands if we have a description
+  if (stepOptions.description && commands.length > 0)
   {
-    console.log(`  $ ${command}`);
+    for (const cmd of commands)
+    {
+      if (typeof cmd === 'string')
+      {
+        console.log(`  $ ${cmd}`);
+      }
+      else
+      {
+        console.log(`  [function]`);
+      }
+    }
   }
 
   const startedAt = new Date();
@@ -184,98 +282,82 @@ export async function runStep(
   let stderr: string | undefined;
   let error: Error | undefined;
 
+  // Collect string commands for result
+  const commandStrings = commands.filter((c): c is string => typeof c === 'string');
+
   try
   {
-    if (fn)
+    // Run commands sequentially - mixed array of strings and functions
+    let combinedStdout = '';
+    let combinedStderr = '';
+
+    for (const cmd of commands)
     {
-      // Execute function step - no output capture possible
-      await fn();
-    }
-    else if (command)
-    {
-      if (stepOptions.interactive)
+      if (typeof cmd === 'string')
       {
-        // Use spawnSync for interactive commands (browser auth flows, etc.)
-        // Cannot capture output because stdio: 'inherit' hands terminal to child
-        const result = spawnSync(command, {
-          stdio: 'inherit',
-          cwd: stepOptions.cwd,
-          shell: true,
-          env: { ...process.env, ...stepOptions.env },
-        });
-
-        exitCode = result.status ?? undefined;
-
-        if (result.status !== 0 && stepOptions.onError !== 'continue')
-        {
-          const err = new Error(
-            `Command failed with exit code ${result.status}`,
-          );
-          if (stepOptions.onError === 'warn')
-          {
-            console.warn(`⚠️  ${err.message}`);
-            status = 'warning';
-          }
-          else
-          {
-            throw err;
-          }
-        }
-      }
-      else if (captureOutput)
-      {
-        // Use platform-specific capture: tee on Unix, TextDecoder fallback on Windows
-        const captureCommand = isUnix ? runCommandWithTee : runCommandWithCapture;
-        const result = await captureCommand(command, {
-          cwd: stepOptions.cwd,
-          env: stepOptions.env,
-        });
-
+        // Shell command
+        const result = await runSingleCommand(cmd, stepOptions, captureOutput);
         exitCode = result.exitCode;
-        stdout = result.stdout;
-        stderr = result.stderr;
+
+        if (result.stdout) combinedStdout += result.stdout;
+        if (result.stderr) combinedStderr += result.stderr;
+
+        // Update stdout/stderr after each command so they're available if we throw
+        stdout = combinedStdout || undefined;
+        stderr = combinedStderr || undefined;
 
         if (result.exitCode !== 0 && stepOptions.onError !== 'continue')
         {
-          const err = new Error(
-            `Command failed with exit code ${result.exitCode}`,
-          );
           if (stepOptions.onError === 'warn')
           {
-            console.warn(`⚠️  ${err.message}`);
+            console.warn(`⚠️  Command failed with exit code ${result.exitCode}: ${cmd}`);
             status = 'warning';
+            // Continue to next command in warn mode
           }
           else
           {
-            throw err;
+            // Default: fail mode - throw and stop
+            throw new Error(`Command failed with exit code ${result.exitCode}: ${cmd}`);
           }
         }
       }
       else
       {
-        // No capture - use spawnSync with inherit (original behavior)
-        const result = spawnSync(command, {
-          stdio: 'inherit',
-          cwd: stepOptions.cwd,
-          shell: true,
-          env: { ...process.env, ...stepOptions.env },
-        });
+        // Function - execute it and check return value
+        const fnResult = await cmd();
 
-        exitCode = result.status ?? undefined;
-
-        if (result.status !== 0 && stepOptions.onError !== 'continue')
+        // Handle return value: void/undefined = success, true = success, false = failure,
+        // 0 = success, non-zero number = failure
+        if (fnResult === false)
         {
-          const err = new Error(
-            `Command failed with exit code ${result.status}`,
-          );
-          if (stepOptions.onError === 'warn')
+          exitCode = 1;
+          if (stepOptions.onError !== 'continue')
           {
-            console.warn(`⚠️  ${err.message}`);
-            status = 'warning';
+            if (stepOptions.onError === 'warn')
+            {
+              console.warn(`⚠️  Function returned false`);
+              status = 'warning';
+            }
+            else
+            {
+              throw new Error('Function returned false');
+            }
           }
-          else
+        }
+        else if (typeof fnResult === 'number' && fnResult !== 0)
+        {
+          exitCode = fnResult;
+          if (stepOptions.onError !== 'continue')
           {
-            throw err;
+            if (stepOptions.onError === 'warn')
+            {
+              console.warn(`⚠️  Function returned non-zero exit code: ${fnResult}`);
+              status = 'warning';
+            }
+            else
+            {
+              throw new Error(`Function returned non-zero exit code: ${fnResult}`);
+            }
           }
         }
       }
@@ -310,7 +392,7 @@ export async function runStep(
     index,
     type,
     description: desc,
-    command,
+    commands: commandStrings.length > 0 ? commandStrings : undefined,
     status,
     startedAt,
     finishedAt,
@@ -338,7 +420,7 @@ if (import.meta.main)
   console.log('-> executing ./src/script/runStep.ts');
 
   // Exercise the function with a simple step
-  const testStep: Step = { command: 'echo "runStep test"', options: {} };
+  const testStep: Step = { commands: ['echo "runStep test"'], options: {}, nextStepType: 'none' };
   runStep(testStep, 0, { captureOutput: true }).then((result) =>
   {
     console.log('runStep() completed with result:');

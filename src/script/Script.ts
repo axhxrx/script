@@ -167,34 +167,47 @@ export class Script
   {
     if (typeof commandOrFn === 'string')
     {
-      // If multiLine option is set, treat as single command (original behavior)
+      // If multiLine option is set, treat as single command
       if (options.multiLine)
       {
         const step: Step = {
-          command: commandOrFn,
+          commands: [commandOrFn],
           options: { canSkip: true, ...options },
+          nextStepType: 'none',
         };
         this.#steps.push(step);
         return new ScriptBuilder(step);
       }
 
-      // Default: split multi-line strings into separate steps
+      // Split multi-line strings into commands array
       const commands = splitCommandLines(commandOrFn);
       if (commands.length === 0)
       {
-        // Empty or comment-only input - return builder with empty array
-        return new ScriptBuilder([]);
+        // Empty or comment-only input - create step with empty commands
+        const step: Step = {
+          commands: [],
+          options: { canSkip: true, ...options },
+          nextStepType: 'none',
+        };
+        return new ScriptBuilder(step);
       }
-      const steps: Step[] = commands.map(cmd => ({
-        command: cmd,
+
+      // Create step with commands array
+      const step: Step = {
+        commands: commands,
         options: { canSkip: true, ...options },
-      }));
-      this.#steps.push(...steps);
-      return new ScriptBuilder(steps);
+        nextStepType: 'none',
+      };
+      this.#steps.push(step);
+      return new ScriptBuilder(step);
     }
 
-    // Function step - single step as before
-    const step: Step = { fn: commandOrFn, options: { canSkip: true, ...options } };
+    // Function step - single function in commands array
+    const step: Step = {
+      commands: [commandOrFn],
+      options: { canSkip: true, ...options },
+      nextStepType: 'none',
+    };
     this.#steps.push(step);
     return new ScriptBuilder(step);
   }
@@ -282,6 +295,40 @@ export class Script
   }
 
   /**
+   Get a description for a step, handling both commands and functions.
+   */
+  #getStepDescription(step: Step): string
+  {
+    if (step.options.description)
+    {
+      return step.options.description;
+    }
+
+    if (step.commands.length === 0)
+    {
+      return '[empty step]';
+    }
+
+    const first = step.commands[0];
+    if (typeof first === 'string')
+    {
+      return step.commands.length === 1
+        ? first
+        : `[${step.commands.length} commands]`;
+    }
+
+    return '[function step]';
+  }
+
+  /**
+   Check if a step contains only functions (no shell commands).
+   */
+  #isFunctionStep(step: Step): boolean
+  {
+    return step.commands.length > 0 && step.commands.every(cmd => typeof cmd === 'function');
+  }
+
+  /**
    Print the accumulated plan without executing.
    */
   #printPlan(header = '📋 Execution Plan'): void
@@ -296,10 +343,10 @@ export class Script
       }
 
       const step = this.#steps[i];
-      const desc = step.options.description || step.command || '[function step]';
+      const desc = this.#getStepDescription(step);
       const flags: string[] = [];
 
-      if (step.fn)
+      if (this.#isFunctionStep(step))
       {
         flags.push('fn');
       }
@@ -320,17 +367,28 @@ export class Script
         const skipLabel = step.options.canSkip ? 'skippable' : 'required';
         flags.push(`confirm: ${skipLabel}`);
       }
+      if (step.nextStepType !== 'none')
+      {
+        flags.push(`has ${step.nextStepType === 'or' ? 'fallback' : 'continuation'}`);
+      }
 
       const flagStr = flags.length > 0 ? ` (${flags.join(', ')})` : '';
       console.log(`  ${i + 1}. ${desc}${flagStr}`);
 
-      if (
-        step.command
-        && step.options.description
-        && step.options.description !== step.command
-      )
+      // Show individual commands if we have a description
+      if (step.options.description && step.commands.length > 0)
       {
-        console.log(`     └─ ${step.command}`);
+        for (const cmd of step.commands)
+        {
+          if (typeof cmd === 'string')
+          {
+            console.log(`     └─ ${cmd}`);
+          }
+          else
+          {
+            console.log(`     └─ [function]`);
+          }
+        }
       }
     }
 
@@ -341,6 +399,92 @@ export class Script
     }
 
     console.log(`\nTotal: ${this.#steps.length} steps\n`);
+  }
+
+  /**
+   Execute a step chain, following and/or links based on success/failure.
+
+   @returns The StepResult from the final step in the chain
+   */
+  async #executeStepChain(
+    step: Step,
+    index: number,
+    captureOutput: boolean,
+  ): Promise<StepResult>
+  {
+    let currentStep: Step = step;
+    let lastResult: StepResult | undefined;
+    let lastError: Error | undefined;
+
+    while (true)
+    {
+      try
+      {
+        lastResult = await runStep(currentStep, index, { captureOutput });
+
+        // Step succeeded - follow andStep if present
+        if (currentStep.nextStepType === 'and')
+        {
+          const andDesc = this.#getStepDescription(currentStep.nextStep);
+          console.log(`  → Continuing: ${andDesc}`);
+          currentStep = currentStep.nextStep;
+          continue;
+        }
+
+        // No continuation - we're done
+        return lastResult;
+      }
+      catch (err: unknown)
+      {
+        const errWithResult = err as Error & { stepResult?: StepResult };
+        if (errWithResult.stepResult)
+        {
+          lastResult = errWithResult.stepResult;
+        }
+        else
+        {
+          const now = new Date();
+          lastResult = {
+            index,
+            type: this.#isFunctionStep(currentStep)
+              ? 'function'
+              : currentStep.options.interactive
+              ? 'interactive'
+              : 'command',
+            description: this.#getStepDescription(currentStep),
+            commands: currentStep.commands.filter((c): c is string => typeof c === 'string'),
+            status: 'error',
+            startedAt: now,
+            finishedAt: now,
+            durationMs: 0,
+            error: err instanceof Error ? err : new Error(String(err)),
+          };
+        }
+        lastError = err instanceof Error ? err : new Error(String(err));
+
+        // Step failed - follow orStep if present
+        if (currentStep.nextStepType === 'or')
+        {
+          const orDesc = this.#getStepDescription(currentStep.nextStep);
+          console.log(`  ↻ Attempting fallback: ${orDesc}`);
+          currentStep = currentStep.nextStep;
+          continue;
+        }
+
+        // No fallback - throw the error
+        break;
+      }
+    }
+
+    // Exhausted all options - throw the last error
+    if (lastError && lastResult)
+    {
+      (lastError as Error & { stepResult?: StepResult }).stepResult = lastResult;
+      throw lastError;
+    }
+
+    // Should never get here, but TypeScript needs it
+    throw new Error('Unexpected: no result from step execution');
   }
 
   /**
@@ -434,7 +578,7 @@ export class Script
       }
 
       const step = this.#steps[i];
-      const stepDesc = step.options.description || step.command || '[function step]';
+      const stepDesc = this.#getStepDescription(step);
 
       // Run step-level validation if present
       if (step.options.validateFn)
@@ -496,9 +640,9 @@ export class Script
           const now = new Date();
           const skipResult: StepResult = {
             index: i,
-            type: step.fn ? 'function' : step.options.interactive ? 'interactive' : 'command',
+            type: this.#isFunctionStep(step) ? 'function' : step.options.interactive ? 'interactive' : 'command',
             description: stepDesc,
-            command: step.command,
+            commands: step.commands.filter((c): c is string => typeof c === 'string'),
             status: 'skipped',
             startedAt: now,
             finishedAt: now,
@@ -513,14 +657,14 @@ export class Script
 
       try
       {
-        const stepResult = await runStep(step, i, { captureOutput });
+        const stepResult = await this.#executeStepChain(step, i, captureOutput);
         this.#stepResults.push(stepResult);
         result.stepsRun++;
         result.executed = true; // Only true after at least one step completes
       }
       catch (error: unknown)
       {
-        // Try to get stepResult from the error if runStep attached it
+        // Get the step result from the error if available
         const errWithResult = error as Error & { stepResult?: StepResult };
         if (errWithResult.stepResult)
         {

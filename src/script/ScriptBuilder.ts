@@ -1,40 +1,50 @@
 import type { Step } from './Step.ts';
+import type { StepFn } from './StepFn.ts';
 
 /**
  Builder for configuring individual steps with a fluent API.
 
- When constructed with multiple steps (from a multi-line add()), all builder methods apply to all steps.
+ The `.or()` method creates a fallback step (like shell's `||`), and `.and()` creates a continuation step (like shell's `&&`). Both return a new builder for the created step.
+
+ @example
+ ```ts
+ add("git push -u origin main")
+   .description("Push to GitHub")
+   .cwd(pathToNewRepo)
+   .or(`
+     ~/bin/update_ssh_auth_keys.ts
+     git push -u origin main
+   `)
+   .cwd(pathToNewRepo)
+   .or(() => console.log("trying..."))
+     .and(`gh auth switch`)
+     .and(`git push -u origin main`);
+ ```
  */
 export class ScriptBuilder
 {
-  #steps: Step[];
+  #step: Step;
 
-  constructor(steps: Step | Step[])
+  constructor(step: Step)
   {
-    this.#steps = Array.isArray(steps) ? steps : [steps];
+    this.#step = step;
   }
 
   /**
-   Set a human-readable description for this step (or all steps if multi-line).
+   Set a human-readable description for this step.
    */
   description(desc: string): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.description = desc;
-    }
+    this.#step.options.description = desc;
     return this;
   }
 
   /**
-   Set the working directory for this step (or all steps if multi-line).
+   Set the working directory for this step.
    */
   cwd(path: string): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.cwd = path;
-    }
+    this.#step.options.cwd = path;
     return this;
   }
 
@@ -43,22 +53,16 @@ export class ScriptBuilder
    */
   interactive(value = true): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.interactive = value;
-    }
+    this.#step.options.interactive = value;
     return this;
   }
 
   /**
-   Set additional environment variables for this step (or all steps if multi-line).
+   Set additional environment variables for this step.
    */
   env(vars: Record<string, string>): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.env = { ...step.options.env, ...vars };
-    }
+    this.#step.options.env = { ...this.#step.options.env, ...vars };
     return this;
   }
 
@@ -70,10 +74,7 @@ export class ScriptBuilder
    */
   onError(behavior: 'fail' | 'warn' | 'continue'): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.onError = behavior;
-    }
+    this.#step.options.onError = behavior;
     return this;
   }
 
@@ -85,10 +86,23 @@ export class ScriptBuilder
    */
   confirm(question?: string, defaultYes = true): this
   {
-    for (const step of this.#steps)
+    this.#step.options.confirmPrompt = question ?? 'Run this step?';
+    this.#step.options.confirmDefault = defaultYes;
+    return this;
+  }
+
+  /**
+   Only if `condition` is truthy, add a confirmation prompt that will be shown during execution. This is different from ask() which runs during planning.
+
+   @param condition - If true, add a confirmation prompt
+   @param question - The question to ask (default: "Run this step?")
+   @param defaultYes - Default answer (default: true)
+   */
+  confirmIf(condition: boolean, question?: string, defaultYes = true): this
+  {
+    if (condition)
     {
-      step.options.confirmPrompt = question ?? 'Run this step?';
-      step.options.confirmDefault = defaultYes;
+      this.confirm(question, defaultYes);
     }
     return this;
   }
@@ -102,10 +116,7 @@ export class ScriptBuilder
    */
   canSkip(value = true): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.canSkip = value;
-    }
+    this.#step.options.canSkip = value;
     return this;
   }
 
@@ -120,12 +131,115 @@ export class ScriptBuilder
     description?: string,
   ): this
   {
-    for (const step of this.#steps)
-    {
-      step.options.validateFn = check;
-      step.options.validateDescription = description;
-    }
+    this.#step.options.validateFn = check;
+    this.#step.options.validateDescription = description;
     return this;
+  }
+
+  /**
+   Create a continuation step that runs if this step succeeds. Like shell's `&&` operator.
+
+   Returns a new ScriptBuilder for configuring the continuation step. The new step has its own cwd, env, description, etc.
+
+   @param cmdOrFn - Shell command string (can be multi-line) or function for the continuation
+   @returns ScriptBuilder for the continuation step
+
+   @example
+   ```ts
+   add("npm install")
+     .and("npm run build")
+       .cwd("./dist")
+     .and("npm test");
+   ```
+   */
+  and(cmdOrFn: string | StepFn): ScriptBuilder
+  {
+    // Create the continuation step
+    const andStep: Step = {
+      commands: [],
+      options: {},
+      nextStepType: 'none',
+    };
+
+    // Parse the command/function
+    if (typeof cmdOrFn === 'string')
+    {
+      // Split multi-line strings into commands array
+      const lines = cmdOrFn.split('\n');
+      for (const rawLine of lines)
+      {
+        const line = rawLine.trim();
+        if (line !== '' && !line.startsWith('#'))
+        {
+          andStep.commands.push(line);
+        }
+      }
+    }
+    else
+    {
+      andStep.commands.push(cmdOrFn);
+    }
+
+    // Mutate the current step to add nextStep
+    // TypeScript sees this as a discriminated union, but at runtime we can mutate
+    (this.#step as { nextStep: Step; nextStepType: 'and' }).nextStep = andStep;
+    (this.#step as { nextStepType: 'and' }).nextStepType = 'and';
+
+    // Return builder for the andStep
+    return new ScriptBuilder(andStep);
+  }
+
+  /**
+   Create a fallback step that runs if this step fails. Like shell's `||` operator.
+
+   Returns a new ScriptBuilder for configuring the fallback step. The fallback step has its own cwd, env, description, etc.
+
+   @param cmdOrFn - Shell command string (can be multi-line) or function for the fallback
+   @returns ScriptBuilder for the fallback step
+
+   @example
+   ```ts
+   add("git push -u origin main")
+     .description("Push to GitHub")
+     .or("~/bin/fix_ssh.sh")
+       .description("Fix SSH keys")
+     .or(() => console.log("giving up"));
+   ```
+   */
+  or(cmdOrFn: string | StepFn): ScriptBuilder
+  {
+    // Create the fallback step
+    const orStep: Step = {
+      commands: [],
+      options: {},
+      nextStepType: 'none',
+    };
+
+    // Parse the command/function
+    if (typeof cmdOrFn === 'string')
+    {
+      // Split multi-line strings into commands array
+      const lines = cmdOrFn.split('\n');
+      for (const rawLine of lines)
+      {
+        const line = rawLine.trim();
+        if (line !== '' && !line.startsWith('#'))
+        {
+          orStep.commands.push(line);
+        }
+      }
+    }
+    else
+    {
+      orStep.commands.push(cmdOrFn);
+    }
+
+    // Mutate the current step to add nextStep
+    (this.#step as { nextStep: Step; nextStepType: 'or' }).nextStep = orStep;
+    (this.#step as { nextStepType: 'or' }).nextStepType = 'or';
+
+    // Return builder for the orStep
+    return new ScriptBuilder(orStep);
   }
 }
 
@@ -134,7 +248,7 @@ if (import.meta.main)
   console.log('-> executing ./src/script/ScriptBuilder.ts');
 
   // Minimal exercise of the code
-  const mockStep: Step = { command: 'echo test', options: {} };
+  const mockStep: Step = { commands: ['echo test'], options: {}, nextStepType: 'none' };
   const builder = new ScriptBuilder(mockStep);
   builder.description('test').cwd('/tmp');
   console.log('ScriptBuilder created and configured successfully');
