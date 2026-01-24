@@ -29,9 +29,9 @@ export interface StepResult
   description: string;
 
   /**
-   The raw command string, if this was a command step.
+   The raw command strings that were executed (excludes functions). Empty for function-only steps.
    */
-  command?: string;
+  commands?: string[];
 
   /**
    Status of the step execution.

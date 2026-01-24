@@ -1,6 +1,12 @@
 # @axhxrx/script
 
-This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as Bun Shell, but it works on any TypeScript runtime (even Node.js).
+This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as [Bun Shell](https://bun.com/docs/runtime/shell) , but it works on any TypeScript runtime (even Node.js).
+
+## TL;DR
+
+```ts
+
+```
 
 ## Why shell scripts make you die
 
@@ -131,29 +137,30 @@ if (args.gcloudAuth) {
 
   // steps can be modified via builder-pattern methods:
   add("gcloud auth login")
-      // User-friendly description shows up when executing
     .description("Authenticate with gcloud")
-      // inherit stdin so the user can type in the auth code
     .interactive()
-      // user might cancel this step, it's ok, don't quit
     .onError("warn");
-       // set cwd for this step
     .cwd('~')
-      // optional per-step confirmation for dangerous steps
     .confirm("⚠️ May cause computer explosion. Are you sure?", true)
-      // should execution keep going even if confirm() answer is no?
-    .canSkip(true)
-      // Step-level validation executes right before the step is
-      // executed. This means it can depend on the results of
-      // previous steps. (Although that can mean partial execution.)
+    .canSkip(falsee)
     .validate(() => {
       return doSomething();
     });
 }
+```
 
-// You can also schedule script-level validations any time before
-// calling execute(). All validations run before any steps
-// are executed. This is for pre-flight sanity-checking.
+| Method           | Description                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `.description()` | Optional user-friendly description shows up when executing, in addition to the raw command                               |
+| `.interactive()` | Inherit stdin so the user can type in the auth code                                                                      |
+| `.onError()`     | User might cancel this step, it's ok, don't quit                                                                         |
+| `.cwd()`         | Set cwd for this step                                                                                                    |
+| `.confirm()`     | Optional per-step confirmation for dangerous steps                                                                       |
+| `.canSkip()`     | Should execution keep going even if confirm() answer is no?                                                              |
+| `.validate()`    | Step-level validation executes right before the step is executed (and thus can depend on the results of previous steps). |
+
+```ts
+// You can also schedule script-level validations any time before calling execute(). All validations run before any steps are executed. This is for pre-flight sanity-checking.
 validate(async () => {
   const somebody = await mainScreenTurnOn();
   return !somebody.seUpUsTheBomb; // we're good to go
