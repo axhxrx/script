@@ -1,5 +1,6 @@
 import type { FileOptions } from './FileOptions.ts';
 import { normalizeFileOptions } from './FileOptions.ts';
+import { splitCommandLines } from './splitCommandLines.ts';
 import type { Step } from './Step.ts';
 import type { StepFn } from './StepFn.ts';
 
@@ -194,19 +195,10 @@ export class StepBuilder
       nextStepType: 'none',
     };
 
-    // Parse the command/function
+    // Parse the command/function using shared helper (handles backslash continuations, comments, etc.)
     if (typeof cmdOrFn === 'string')
     {
-      // Split multi-line strings into commands array
-      const lines = cmdOrFn.split('\n');
-      for (const rawLine of lines)
-      {
-        const line = rawLine.trim();
-        if (line !== '' && !line.startsWith('#'))
-        {
-          andStep.commands.push(line);
-        }
-      }
+      andStep.commands = splitCommandLines(cmdOrFn);
     }
     else
     {
@@ -248,19 +240,10 @@ export class StepBuilder
       nextStepType: 'none',
     };
 
-    // Parse the command/function
+    // Parse the command/function using shared helper (handles backslash continuations, comments, etc.)
     if (typeof cmdOrFn === 'string')
     {
-      // Split multi-line strings into commands array
-      const lines = cmdOrFn.split('\n');
-      for (const rawLine of lines)
-      {
-        const line = rawLine.trim();
-        if (line !== '' && !line.startsWith('#'))
-        {
-          orStep.commands.push(line);
-        }
-      }
+      orStep.commands = splitCommandLines(cmdOrFn);
     }
     else
     {
