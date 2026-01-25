@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
 
-import process from 'node:process';
-
 import { ask } from './ask.ts';
 import type { ExecuteOptions } from './ExecuteOptions.ts';
 import type { ExecuteResult } from './ExecuteResult.ts';
+import type { FileOptions } from './FileOptions.ts';
+import { normalizeFileOptions } from './FileOptions.ts';
+import { OutputContext } from './OutputContext.ts';
 import { parseScriptArgs } from './parseScriptArgs.ts';
 import { printBanner } from './printBanner.ts';
 import { getStepDescription, runStep } from './runStep.ts';
@@ -80,6 +81,7 @@ export class Script
   #validations: Validation[] = [];
   #banners = new Map<number, string>();
   #stepResults: StepResult[] = [];
+  #outputContext: OutputContext = new OutputContext(true);
 
   /**
    Get the results of steps executed so far. Useful for step N to inspect results of step N-1.
@@ -87,6 +89,45 @@ export class Script
   get stepResults(): readonly StepResult[]
   {
     return [...this.#stepResults];
+  }
+
+  /**
+   Configure file logging for all script output.
+
+   @param options - File path, boolean, or full FileOptions object
+   @returns Promise that resolves to the actual file path being written to
+
+   @example
+   ```ts
+   // Log to temp file (prints path with tail hint)
+   await script.file();
+
+   // Log to specific path in append mode
+   await script.file('./script.log');
+
+   // Full options
+   await script.file({
+     path: './logs/script.log',
+     mode: 'increment',
+     output: 'command',  // Only command output, no framework messages
+     redact: 'auto',
+     timestamps: true,
+     stderr: 'prefixed'
+   });
+   ```
+   */
+  async file(options?: string | boolean | FileOptions): Promise<string | undefined>
+  {
+    const filePath = await this.#outputContext.setFile(normalizeFileOptions(options ?? true));
+
+    // Print file path hint if we got a file
+    if (filePath)
+    {
+      this.#outputContext.log(`📝 Logging to: ${filePath}`);
+      this.#outputContext.log(`   (To watch: tail -f ${filePath})\n`);
+    }
+
+    return filePath;
   }
 
   /**
@@ -210,40 +251,42 @@ export class Script
    */
   async #runScriptValidations(): Promise<boolean>
   {
+    const ctx = this.#outputContext;
+
     if (this.#validations.length === 0)
     {
       return true;
     }
 
-    console.log('\n🔍 Running validations...\n');
+    ctx.log('\n🔍 Running validations...\n');
 
     let allPassed = true;
 
     for (const validation of this.#validations)
     {
-      process.stdout.write(`  ○ ${validation.description}... `);
+      ctx.write(`  ○ ${validation.description}... `);
       const result = await runValidation(validation);
 
       if (result.passed)
       {
-        console.log('✓');
+        ctx.log('✓');
       }
       else
       {
-        console.log('✗');
+        ctx.log('✗');
         if (result.error)
         {
-          console.log(`    └─ ${result.error}`);
+          ctx.log(`    └─ ${result.error}`);
         }
         allPassed = false;
       }
     }
 
-    console.log('');
+    ctx.log('');
 
     if (!allPassed)
     {
-      console.error('❌ Validation failed. Please fix the issues above.\n');
+      ctx.error('❌ Validation failed. Please fix the issues above.\n');
     }
 
     return allPassed;
@@ -265,13 +308,15 @@ export class Script
    */
   #printPlan(header = '📋 Execution Plan'): void
   {
-    console.log(`\n${header}\n`);
+    const ctx = this.#outputContext;
+
+    ctx.log(`\n${header}\n`);
 
     for (let i = 0; i < this.#steps.length; i++)
     {
       if (this.#banners.has(i))
       {
-        console.log(`\n  ── ${this.#banners.get(i)} ──\n`);
+        ctx.log(`\n  ── ${this.#banners.get(i)} ──\n`);
       }
 
       const step = this.#steps[i];
@@ -307,7 +352,7 @@ export class Script
       }
 
       const flagStr = flags.length > 0 ? ` (${flags.join(', ')})` : '';
-      console.log(`  ${i + 1}. ${desc}${flagStr}`);
+      ctx.log(`  ${i + 1}. ${desc}${flagStr}`);
 
       // Show individual commands if we have a description
       if (step.options.description && step.commands.length > 0)
@@ -316,11 +361,11 @@ export class Script
         {
           if (typeof cmd === 'string')
           {
-            console.log(`     └─ ${cmd}`);
+            ctx.log(`     └─ ${cmd}`);
           }
           else
           {
-            console.log(`     └─ [function]`);
+            ctx.log(`     └─ [function]`);
           }
         }
       }
@@ -329,10 +374,10 @@ export class Script
     // Print any trailing banner
     if (this.#banners.has(this.#steps.length))
     {
-      console.log(`\n  ── ${this.#banners.get(this.#steps.length)} ──\n`);
+      ctx.log(`\n  ── ${this.#banners.get(this.#steps.length)} ──\n`);
     }
 
-    console.log(`\nTotal: ${this.#steps.length} steps\n`);
+    ctx.log(`\nTotal: ${this.#steps.length} steps\n`);
   }
 
   /**
@@ -346,6 +391,7 @@ export class Script
     captureOutput: boolean,
   ): Promise<StepResult>
   {
+    const ctx = this.#outputContext;
     let currentStep: Step = step;
     let lastResult: StepResult | undefined;
     let lastError: Error | undefined;
@@ -356,11 +402,24 @@ export class Script
     // Collect results from each step in the chain
     const chainResults: ChainStepResult[] = [];
 
+    // Default step context from ROOT step's file options
+    const rootStepCtx = step.options.fileOptions
+      ? await ctx.forStep(step.options.fileOptions)
+      : ctx;
+
     while (true)
     {
       try
       {
-        lastResult = await runStep(currentStep, index, { captureOutput });
+        // If current step has its own file options, use those; otherwise use root/parent context
+        const currentStepCtx = currentStep.options.fileOptions
+          ? await ctx.forStep(currentStep.options.fileOptions)
+          : rootStepCtx;
+
+        lastResult = await runStep(currentStep, index, {
+          captureOutput,
+          outputContext: currentStepCtx,
+        });
 
         // Record this step's result in the chain
         chainResults.push({
@@ -382,7 +441,7 @@ export class Script
         if (currentStep.nextStepType === 'and')
         {
           const andDesc = getStepDescription(currentStep.nextStep);
-          console.log(`↪️  AND: ${andDesc}`);
+          ctx.log(`↪️  AND: ${andDesc}`);
           currentStep = currentStep.nextStep;
           currentLinkType = 'and';
           continue;
@@ -442,7 +501,7 @@ export class Script
         if (currentStep.nextStepType === 'or')
         {
           const orDesc = getStepDescription(currentStep.nextStep);
-          console.log(`\n↩️  OR: ${orDesc}`);
+          ctx.log(`\n↩️  OR: ${orDesc}`);
           currentStep = currentStep.nextStep;
           currentLinkType = 'or';
           continue;
@@ -473,6 +532,8 @@ export class Script
    */
   async execute(options: ExecuteOptions = {}): Promise<ExecuteResult>
   {
+    const ctx = this.#outputContext;
+
     // Merge parsed args with explicit options (explicit options always win)
     let dryRun = options.dryRun;
     let yes = options.yes;
@@ -503,7 +564,7 @@ export class Script
 
     if (this.#steps.length === 0)
     {
-      console.log('\n📋 No steps to execute.\n');
+      ctx.log('\n📋 No steps to execute.\n');
       result.state = 'complete';
       return result;
     }
@@ -535,7 +596,7 @@ export class Script
       const proceed = await ask('Proceed with execution?', true);
       if (!proceed)
       {
-        console.log('\n❌ Aborted.\n');
+        ctx.log('\n❌ Aborted.\n');
         result.aborted = true;
         result.state = 'failed';
         if (printResults)
@@ -546,13 +607,13 @@ export class Script
       }
     }
 
-    console.log(`\n🚀 Executing ${this.#steps.length} steps...\n`);
+    ctx.log(`\n🚀 Executing ${this.#steps.length} steps...\n`);
 
     for (let i = 0; i < this.#steps.length; i++)
     {
       if (this.#banners.has(i))
       {
-        printBanner(this.#banners.get(i)!);
+        printBanner(this.#banners.get(i)!, ctx);
       }
 
       const step = this.#steps[i];
@@ -562,7 +623,7 @@ export class Script
       if (step.options.validateFn)
       {
         const desc = step.options.validateDescription || 'Step validation';
-        process.stdout.write(`  🔍 ${desc}... `);
+        ctx.write(`  🔍 ${desc}... `);
         const validationResult = await runValidation({
           description: desc,
           check: step.options.validateFn,
@@ -570,12 +631,12 @@ export class Script
 
         if (!validationResult.passed)
         {
-          console.log('✗');
+          ctx.log('✗');
           if (validationResult.error)
           {
-            console.log(`    └─ ${validationResult.error}`);
+            ctx.log(`    └─ ${validationResult.error}`);
           }
-          console.error('\n❌ Step validation failed.\n');
+          ctx.error('\n❌ Step validation failed.\n');
           result.aborted = true;
           result.state = 'failed';
           result.stepResults = [...this.#stepResults];
@@ -586,7 +647,7 @@ export class Script
           }
           return result;
         }
-        console.log('✓');
+        ctx.log('✓');
       }
 
       // Check for per-step confirmation (either global confirmEach or step-specific)
@@ -601,7 +662,7 @@ export class Script
         {
           if (step.options.canSkip === false)
           {
-            console.error('\n❌ Aborted (step cannot be skipped).');
+            ctx.error('\n❌ Aborted (step cannot be skipped).');
             result.aborted = true;
             result.state = 'failed';
             result.stepResults = [...this.#stepResults];
@@ -612,7 +673,7 @@ export class Script
             }
             return result;
           }
-          console.log('⏭️  Skipped.\n');
+          ctx.log('⏭️  Skipped.\n');
 
           // Record skipped step
           const now = new Date();
@@ -672,14 +733,14 @@ export class Script
     // Print any trailing banner
     if (this.#banners.has(this.#steps.length))
     {
-      printBanner(this.#banners.get(this.#steps.length)!);
+      printBanner(this.#banners.get(this.#steps.length)!, ctx);
     }
 
     result.state = 'complete';
     result.stepResults = [...this.#stepResults];
     result.totalDurationMs = Date.now() - startTime;
 
-    console.log('✅ All steps completed.\n');
+    ctx.log('✅ All steps completed.\n');
     if (printResults)
     {
       this.#printResultsSummary(result);
@@ -744,14 +805,16 @@ export class Script
    */
   #printResultsSummary(result: ExecuteResult): void
   {
-    console.log('\n' + '─'.repeat(60));
-    console.log('📊 Execution Summary');
-    console.log('─'.repeat(60));
+    const ctx = this.#outputContext;
+
+    ctx.log('\n' + '─'.repeat(60));
+    ctx.log('📊 Execution Summary');
+    ctx.log('─'.repeat(60));
 
     // Status line
     const statusEmoji = result.state === 'complete' ? '✅' : '❌';
     const statusText = result.state === 'complete' ? 'Completed' : 'Failed';
-    console.log(`\nStatus: ${statusEmoji} ${statusText}`);
+    ctx.log(`\nStatus: ${statusEmoji} ${statusText}`);
 
     // Count total chain steps executed
     let totalChainSteps = 0;
@@ -777,18 +840,18 @@ export class Script
     const statsLine = result.stepsSkipped > 0
       ? `Steps: ${result.stepsRun} ${chainInfo}, ${result.stepsSkipped} skipped`
       : `Steps: ${result.stepsRun} ${chainInfo}`;
-    console.log(statsLine);
+    ctx.log(statsLine);
 
     if (result.totalDurationMs !== undefined)
     {
-      console.log(`Duration: ${this.#formatDuration(result.totalDurationMs)}`);
+      ctx.log(`Duration: ${this.#formatDuration(result.totalDurationMs)}`);
     }
 
     // Step details with chain expansion
     // Format: Left icon = overall chain result, Right icon = individual step result
     if (result.stepResults.length > 0)
     {
-      console.log('\nStep Results:');
+      ctx.log('\nStep Results:');
       for (const sr of result.stepResults)
       {
         if (sr.chainResults && sr.chainResults.length > 0)
@@ -805,7 +868,7 @@ export class Script
             {
               // Root step: overall chain status on left, step status on right
               const overallIcon = this.#getStatusIcon(sr.status);
-              console.log(
+              ctx.log(
                 `  ${overallIcon} ${sr.index + 1}. ${chainStep.description}${duration} ${stepIcon}`,
               );
             }
@@ -813,7 +876,7 @@ export class Script
             {
               // Chain step: link prefix, step status on right
               const linkPrefix = this.#getLinkPrefix(chainStep.linkType);
-              console.log(
+              ctx.log(
                 `       ${linkPrefix}${chainStep.description}${duration} ${stepIcon}`,
               );
             }
@@ -824,7 +887,7 @@ export class Script
           // No chain results - show simple step (status on both sides, same value)
           const statusIcon = this.#getStatusIcon(sr.status);
           const duration = sr.durationMs > 0 ? ` (${this.#formatDuration(sr.durationMs)})` : '';
-          console.log(`  ${statusIcon} ${sr.index + 1}. ${sr.description}${duration} ${statusIcon}`);
+          ctx.log(`  ${statusIcon} ${sr.index + 1}. ${sr.description}${duration} ${statusIcon}`);
         }
       }
     }
@@ -832,10 +895,10 @@ export class Script
     // Error details
     if (result.error)
     {
-      console.log(`\nError: ${result.error.message}`);
+      ctx.log(`\nError: ${result.error.message}`);
     }
 
-    console.log('');
+    ctx.log('');
   }
 
   /**

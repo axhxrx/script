@@ -1,3 +1,5 @@
+import type { FileOptions } from './FileOptions.ts';
+import { normalizeFileOptions } from './FileOptions.ts';
 import type { Step } from './Step.ts';
 import type { StepFn } from './StepFn.ts';
 
@@ -133,6 +135,37 @@ export class StepBuilder
   {
     this.#step.options.validateFn = check;
     this.#step.options.validateDescription = description;
+    return this;
+  }
+
+  /**
+   Configure file logging for this step's output.
+
+   @param options - File path, boolean, or full FileOptions object
+   @returns this for chaining
+
+   @example
+   ```ts
+   // Log to temp file (prints path with tail hint)
+   add("npm test").file()
+
+   // Log to specific path in append mode
+   add("npm test").file('./test.log')
+
+   // Full options
+   add("npm test").file({
+     path: './logs/test.log',
+     mode: 'increment',
+     output: 'command',
+     redact: 'auto',
+     timestamps: true,
+     stderr: 'prefixed'
+   })
+   ```
+   */
+  file(options?: string | boolean | FileOptions): this
+  {
+    this.#step.options.fileOptions = normalizeFileOptions(options ?? true);
     return this;
   }
 

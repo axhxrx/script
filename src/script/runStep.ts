@@ -6,7 +6,10 @@ import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
+import { format } from 'node:util';
 
+import { defaultOutputContext } from './OutputContext.ts';
+import type { OutputContext } from './OutputContext.ts';
 import type { Step } from './Step.ts';
 import type { StepResult, StepStatus, StepType } from './StepResult.ts';
 
@@ -19,6 +22,11 @@ export interface RunStepOptions
    Capture stdout/stderr from command steps. When true (default), output is both streamed to the terminal and captured in the result.
    */
   captureOutput?: boolean;
+
+  /**
+   Output context for routing output to terminal and/or file.
+   */
+  outputContext?: OutputContext;
 }
 
 /**
@@ -108,9 +116,11 @@ exit $__exit
  */
 function runCommandWithCapture(
   command: string,
-  options: { cwd?: string; env?: Record<string, string> },
+  options: { cwd?: string; env?: Record<string, string>; ctx?: OutputContext },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }>
 {
+  const ctx = options.ctx ?? defaultOutputContext;
+
   return new Promise((resolve, reject) =>
   {
     const child = spawn(command, {
@@ -127,14 +137,14 @@ function runCommandWithCapture(
     child.stdout.on('data', (data: Uint8Array) =>
     {
       const text = stdoutDecoder.decode(data, { stream: true });
-      process.stdout.write(text); // Stream to terminal
+      ctx.stdout(text); // Stream to terminal and file
       stdout += text; // Capture
     });
 
     child.stderr.on('data', (data: Uint8Array) =>
     {
       const text = stderrDecoder.decode(data, { stream: true });
-      process.stderr.write(text); // Stream to terminal
+      ctx.stderr(text); // Stream to terminal and file
       stderr += text; // Capture
     });
 
@@ -157,6 +167,7 @@ async function runSingleCommand(
   command: string,
   stepOptions: Step['options'],
   captureOutput: boolean,
+  ctx: OutputContext,
 ): Promise<{ exitCode: number; stdout?: string; stderr?: string }>
 {
   if (stepOptions.interactive)
@@ -175,11 +186,22 @@ async function runSingleCommand(
   else if (captureOutput)
   {
     // Use platform-specific capture: tee on Unix, TextDecoder fallback on Windows
-    const captureCommand = isUnix ? runCommandWithTee : runCommandWithCapture;
-    return await captureCommand(command, {
-      cwd: stepOptions.cwd,
-      env: stepOptions.env,
-    });
+    // Note: tee uses stdio:'inherit' so can't use ctx there, but Windows path does
+    if (isUnix)
+    {
+      return await runCommandWithTee(command, {
+        cwd: stepOptions.cwd,
+        env: stepOptions.env,
+      });
+    }
+    else
+    {
+      return await runCommandWithCapture(command, {
+        cwd: stepOptions.cwd,
+        env: stepOptions.env,
+        ctx,
+      });
+    }
   }
   else
   {
@@ -253,11 +275,13 @@ export async function runStep(
 ): Promise<StepResult>
 {
   const { commands, options: stepOptions } = step;
+  const ctx = options.outputContext ?? defaultOutputContext;
 
   // Build description
   const desc = getStepDescription(step);
 
-  const captureOutput = options.captureOutput ?? true;
+  // Force output capture if file logging is enabled (otherwise stdio:inherit bypasses file logging)
+  const captureOutput = (options.captureOutput ?? true) || ctx.filePath !== undefined;
 
   // Determine step type
   const type: StepType = isFunctionStep(step)
@@ -266,7 +290,7 @@ export async function runStep(
     ? 'interactive'
     : 'command';
 
-  console.log(`\n🚀 ${desc}\n`);
+  ctx.log(`\n🚀 ${desc}\n`);
 
   // Show individual commands if we have a description
   if (stepOptions.description && commands.length > 0)
@@ -275,11 +299,11 @@ export async function runStep(
     {
       if (typeof cmd === 'string')
       {
-        console.log(`  $ ${cmd}`);
+        ctx.log(`  $ ${cmd}`);
       }
       else
       {
-        console.log(`  [function]`);
+        ctx.log(`  [function]`);
       }
     }
   }
@@ -307,11 +331,19 @@ export async function runStep(
       if (typeof cmd === 'string')
       {
         // Shell command
-        const result = await runSingleCommand(cmd, stepOptions, captureOutput);
+        const result = await runSingleCommand(cmd, stepOptions, captureOutput, ctx);
         exitCode = result.exitCode;
 
         if (result.stdout) combinedStdout += result.stdout;
         if (result.stderr) combinedStderr += result.stderr;
+
+        // On Unix, runCommandWithTee uses stdio:inherit for terminal output, so captured
+        // output wasn't written to the ctx file. Write it now using file-only methods.
+        if (isUnix && captureOutput && ctx.filePath)
+        {
+          if (result.stdout) ctx.fileStdout(result.stdout);
+          if (result.stderr) ctx.fileStderr(result.stderr);
+        }
 
         // Update stdout/stderr after each command so they're available if we throw
         stdout = combinedStdout || undefined;
@@ -321,7 +353,7 @@ export async function runStep(
         {
           if (stepOptions.onError === 'warn')
           {
-            console.warn(
+            ctx.warn(
               `⚠️  Command failed with exit code ${result.exitCode}: ${cmd}`,
             );
             status = 'warning';
@@ -338,8 +370,47 @@ export async function runStep(
       }
       else
       {
-        // Function - execute it and check return value
-        const fnResult = await cmd();
+        // Function - execute it with console interception for file logging
+        let fnResult: void | boolean | number;
+
+        // If we have file logging, intercept console.log/warn/error during function execution
+        if (ctx.filePath)
+        {
+          const originalLog = console.log;
+          const originalWarn = console.warn;
+          const originalError = console.error;
+
+          console.log = (...args: unknown[]) =>
+          {
+            const text = format(...args) + '\n';
+            ctx.stdout(text);
+          };
+          console.warn = (...args: unknown[]) =>
+          {
+            const text = format(...args) + '\n';
+            ctx.stderr(text);
+          };
+          console.error = (...args: unknown[]) =>
+          {
+            const text = format(...args) + '\n';
+            ctx.stderr(text);
+          };
+
+          try
+          {
+            fnResult = await cmd();
+          }
+          finally
+          {
+            console.log = originalLog;
+            console.warn = originalWarn;
+            console.error = originalError;
+          }
+        }
+        else
+        {
+          fnResult = await cmd();
+        }
 
         // Handle return value: void/undefined = success, true = success, false = failure,
         // 0 = success, non-zero number = failure
@@ -350,7 +421,7 @@ export async function runStep(
           {
             if (stepOptions.onError === 'warn')
             {
-              console.warn(`⚠️  Function returned false`);
+              ctx.warn(`⚠️  Function returned false`);
               status = 'warning';
             }
             else
@@ -366,7 +437,7 @@ export async function runStep(
           {
             if (stepOptions.onError === 'warn')
             {
-              console.warn(
+              ctx.warn(
                 `⚠️  Function returned non-zero exit code: ${fnResult}`,
               );
               status = 'warning';
@@ -382,7 +453,7 @@ export async function runStep(
       }
     }
 
-    console.log('');
+    ctx.log('');
   }
   catch (err: unknown)
   {
@@ -390,12 +461,12 @@ export async function runStep(
 
     if (stepOptions.onError === 'warn')
     {
-      console.warn(`⚠️  Warning: ${error.message}\n`);
+      ctx.warn(`⚠️  Warning: ${error.message}\n`);
       status = 'warning';
     }
     else if (stepOptions.onError === 'continue')
     {
-      console.log('✓ Continued (error ignored)\n');
+      ctx.log('✓ Continued (error ignored)\n');
       status = 'success'; // Treat as success since we're continuing
     }
     else

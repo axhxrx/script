@@ -1,3 +1,5 @@
+import type { FileOptions } from './FileOptions.ts';
+
 /**
  `StepOptions` is the raw config for a step.
  */
@@ -75,6 +77,13 @@ export interface StepOptions
    ```
    */
   multiLine?: boolean;
+
+  /**
+   File logging options for this step's output.
+
+   When set, this step's output will be written to a file in addition to (or instead of) terminal output.
+   */
+  fileOptions?: FileOptions;
 }
 
 if (import.meta.main)
