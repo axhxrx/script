@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import process from 'node:process';
 
 import { Script } from './Script.ts';
+import type { StepResult } from './StepResult.ts';
 
 describe('Script.add() multi-line handling', () =>
 {
@@ -378,7 +379,7 @@ describe('Script.execute() state and stepResults', () =>
   test('.stepResults returns accumulated results during execution', async () =>
   {
     const script = new Script();
-    let capturedResults: readonly import('./StepResult.ts').StepResult[] = [];
+    let capturedResults: readonly StepResult[] = [];
 
     script.add('echo first');
     script.add(async () =>
