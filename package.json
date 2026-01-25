@@ -5,6 +5,7 @@
     ".": "./src/mod.ts"
   },
   "dependencies": {
+    "@axhxrx/write-new-file": "npm:@jsr/axhxrx__write-new-file",
     "@std/cli": "npm:@jsr/std__cli",
     "@types/bun": "^1.3.5"
   },

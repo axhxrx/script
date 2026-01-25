@@ -14,5 +14,8 @@
       "**/*.bun.ts",
       "**/*.bun.test.ts"
     ]
+  },
+  "imports": {
+    "@axhxrx/write-new-file": "jsr:@axhxrx/write-new-file@^0.1.0"
   }
 }
