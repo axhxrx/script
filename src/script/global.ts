@@ -1,7 +1,7 @@
 import type { ExecuteOptions } from './ExecuteOptions.ts';
 import type { ExecuteResult } from './ExecuteResult.ts';
 import { Script } from './Script.ts';
-import type { ScriptBuilder } from './ScriptBuilder.ts';
+import type { StepBuilder } from './StepBuilder.ts';
 import type { StepFn } from './StepFn.ts';
 import type { StepOptions } from './StepOptions.ts';
 
@@ -14,7 +14,7 @@ import type { StepOptions } from './StepOptions.ts';
 
  @param commandOrFn - Shell command string or async function to execute
  @param options - Optional directly-specified step options (builder-pattern usually more convenient though)
- @returns ScriptBuilder for builder-pattern configuration
+ @returns StepBuilder for builder-pattern configuration
 
  @example
  ```ts
@@ -41,7 +41,7 @@ import type { StepOptions } from './StepOptions.ts';
 export function add(
   commandOrFn: string | StepFn,
   options: StepOptions = {},
-): ScriptBuilder
+): StepBuilder
 {
   return Script.default.add(commandOrFn, options);
 }

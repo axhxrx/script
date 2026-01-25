@@ -159,7 +159,7 @@ describe('Script.add() with function steps', () =>
   });
 });
 
-describe('ScriptBuilder applies options to step', () =>
+describe('StepBuilder applies options to step', () =>
 {
   test('onError applies to step', async () =>
   {
@@ -375,7 +375,7 @@ describe('Script.execute() state and stepResults', () =>
     expect(result.state).toBe('complete');
   });
 
-  test('getStepResults() returns accumulated results during execution', async () =>
+  test('.stepResults returns accumulated results during execution', async () =>
   {
     const script = new Script();
     let capturedResults: readonly import('./StepResult.ts').StepResult[] = [];
@@ -384,7 +384,7 @@ describe('Script.execute() state and stepResults', () =>
     script.add(async () =>
     {
       // Capture step results during execution
-      capturedResults = script.getStepResults();
+      capturedResults = script.stepResults;
     });
 
     await script.execute({ yes: true, printResults: false });
@@ -524,12 +524,12 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
 
 describe('.or() fallback API', () =>
 {
-  test('.or() returns ScriptBuilder for chaining', () =>
+  test('.or() returns StepBuilder for chaining', () =>
   {
     const script = new Script();
     const builder = script.add('echo test').or('echo fallback');
 
-    // ScriptBuilder should have these methods
+    // StepBuilder should have these methods
     expect(typeof builder.cwd).toBe('function');
     expect(typeof builder.env).toBe('function');
     expect(typeof builder.description).toBe('function');
@@ -935,5 +935,145 @@ describe('StepFn return value handling', () =>
 
     expect(result.state).toBe('complete');
     expect(secondRan).toBe(true);
+  });
+});
+
+describe('chainResults tracking', () =>
+{
+  test('simple step has chainResults with root linkType', async () =>
+  {
+    const script = new Script();
+    script.add('echo hello');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepResults[0].chainResults).toBeDefined();
+    expect(result.stepResults[0].chainResults?.length).toBe(1);
+    expect(result.stepResults[0].chainResults?.[0].linkType).toBe('root');
+    expect(result.stepResults[0].chainResults?.[0].status).toBe('success');
+  });
+
+  test('.and() chain records all steps with correct linkTypes', async () =>
+  {
+    const script = new Script();
+    const order: string[] = [];
+
+    script.add(() =>
+    {
+      order.push('first');
+    })
+      .and(() =>
+      {
+        order.push('second');
+      })
+      .and(() =>
+      {
+        order.push('third');
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    const chain = result.stepResults[0].chainResults;
+    expect(chain?.length).toBe(3);
+    expect(chain?.[0].linkType).toBe('root');
+    expect(chain?.[1].linkType).toBe('and');
+    expect(chain?.[2].linkType).toBe('and');
+  });
+
+  test('.or() fallback records steps with correct linkTypes', async () =>
+  {
+    const script = new Script();
+
+    script.add(() =>
+    {
+      throw new Error('fail');
+    })
+      .or(() =>
+      {
+        // fallback succeeds
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    const chain = result.stepResults[0].chainResults;
+    expect(chain?.length).toBe(2);
+    expect(chain?.[0].linkType).toBe('root');
+    expect(chain?.[0].status).toBe('error');
+    expect(chain?.[1].linkType).toBe('or');
+    expect(chain?.[1].status).toBe('success');
+  });
+
+  test('mixed and/or chain records full execution path', async () =>
+  {
+    const script = new Script();
+
+    script.add(() =>
+    {
+      // root succeeds
+    })
+      .and(() =>
+      {
+        throw new Error('and fails');
+      })
+      .or(() =>
+      {
+        // fallback succeeds
+      })
+      .and(() =>
+      {
+        // continuation succeeds
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    const chain = result.stepResults[0].chainResults;
+    expect(chain?.length).toBe(4);
+    expect(chain?.[0].linkType).toBe('root');
+    expect(chain?.[0].status).toBe('success');
+    expect(chain?.[1].linkType).toBe('and');
+    expect(chain?.[1].status).toBe('error');
+    expect(chain?.[2].linkType).toBe('or');
+    expect(chain?.[2].status).toBe('success');
+    expect(chain?.[3].linkType).toBe('and');
+    expect(chain?.[3].status).toBe('success');
+  });
+
+  test('chainResults contains stdout/stderr from each step', async () =>
+  {
+    const script = new Script();
+
+    script.add('echo first')
+      .and('echo second');
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    const chain = result.stepResults[0].chainResults;
+    expect(chain?.[0].stdout).toBe('first\n');
+    expect(chain?.[1].stdout).toBe('second\n');
+  });
+
+  test('failed chain still has chainResults', async () =>
+  {
+    const script = new Script();
+
+    script.add(() =>
+    {
+      // succeeds
+    })
+      .and(() =>
+      {
+        throw new Error('fails with no fallback');
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('failed');
+    const chain = result.stepResults[0].chainResults;
+    expect(chain?.length).toBe(2);
+    expect(chain?.[0].status).toBe('success');
+    expect(chain?.[1].status).toBe('error');
   });
 });

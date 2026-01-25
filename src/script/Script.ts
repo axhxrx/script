@@ -7,62 +7,15 @@ import type { ExecuteOptions } from './ExecuteOptions.ts';
 import type { ExecuteResult } from './ExecuteResult.ts';
 import { parseScriptArgs } from './parseScriptArgs.ts';
 import { printBanner } from './printBanner.ts';
-import { runStep } from './runStep.ts';
+import { getStepDescription, runStep } from './runStep.ts';
 import { runValidation } from './runValidation.ts';
-import { ScriptBuilder } from './ScriptBuilder.ts';
+import { splitCommandLines } from './splitCommandLines.ts';
 import type { Step } from './Step.ts';
+import { StepBuilder } from './StepBuilder.ts';
 import type { StepFn } from './StepFn.ts';
 import type { StepOptions } from './StepOptions.ts';
-import type { StepResult } from './StepResult.ts';
+import type { ChainLinkType, ChainStepResult, StepResult } from './StepResult.ts';
 import type { Validation } from './Validation.ts';
-
-/**
- Split a multi-line command string into individual commands.
-
- Handles:
- - Empty lines (skipped)
- - Comment lines starting with # (skipped)
- - Backslash line continuations (joined)
- - Leading/trailing whitespace (trimmed)
-
- NOTE: When using backslash continuation in template literals, remember that TypeScript/JavaScript interprets `\ ` (backslash-space) as an escape sequence that produces just a space. To get a literal backslash for continuation, use `\\` in your template literal. This is a subtle bug that's easy to introduce and hard to notice.
- */
-function splitCommandLines(input: string): string[]
-{
-  const lines = input.split('\n');
-  const commands: string[] = [];
-  let continuation = '';
-
-  for (const rawLine of lines)
-  {
-    const line = rawLine.trim();
-
-    // Skip empty lines and comment-only lines
-    if (line === '' || line.startsWith('#'))
-    {
-      continue;
-    }
-
-    // Handle backslash continuation
-    if (line.endsWith('\\'))
-    {
-      continuation += line.slice(0, -1) + ' ';
-      continue;
-    }
-
-    // Complete command (with any accumulated continuation)
-    commands.push(continuation + line);
-    continuation = '';
-  }
-
-  // Handle trailing continuation (edge case - treat as complete)
-  if (continuation)
-  {
-    commands.push(continuation.trim());
-  }
-
-  return commands;
-}
 
 /**
  A Script encapsulates steps, validations, and banners for a scripted workflow.
@@ -108,7 +61,9 @@ export class Script
   /**
    The global default Script instance. All module-level functions (`add`, `banner`, `validate`, `execute`, etc.) delegate to this instance.
 
-   For most use cases, you don't need to access this directly — just use the module-level functions. For advanced use cases (testing, conditional script selection), you can create your own instances of `Script`.
+   For most use cases, you don't need to access this directly — just use the module-level functions. Most scripts are conceptually just a single  global script, so its simpler that way.
+
+   For advanced use cases (testing, conditional script selection), you can create your own instances of `Script`. Or, if you are just an O.G. radguy warez kingpin kind of person, and you love you some old-timey OOP... knock yourself out.
    */
   static #default: Script | undefined;
 
@@ -129,7 +84,7 @@ export class Script
   /**
    Get the results of steps executed so far. Useful for step N to inspect results of step N-1.
    */
-  getStepResults(): readonly StepResult[]
+  get stepResults(): readonly StepResult[]
   {
     return [...this.#stepResults];
   }
@@ -139,7 +94,7 @@ export class Script
 
    @param commandOrFn - Shell command string or async function to execute
    @param options - Optional directly-specified step options (builder-pattern usually more convenient though)
-   @returns ScriptBuilder for builder-pattern configuration
+   @returns StepBuilder for builder-pattern configuration
 
    @example
    ```ts
@@ -163,7 +118,7 @@ export class Script
    }).description('Checkout or create feature branch');
    ```
    */
-  add(commandOrFn: string | StepFn, options: StepOptions = {}): ScriptBuilder
+  add(commandOrFn: string | StepFn, options: StepOptions = {}): StepBuilder
   {
     if (typeof commandOrFn === 'string')
     {
@@ -176,7 +131,7 @@ export class Script
           nextStepType: 'none',
         };
         this.#steps.push(step);
-        return new ScriptBuilder(step);
+        return new StepBuilder(step);
       }
 
       // Split multi-line strings into commands array
@@ -189,7 +144,7 @@ export class Script
           options: { canSkip: true, ...options },
           nextStepType: 'none',
         };
-        return new ScriptBuilder(step);
+        return new StepBuilder(step);
       }
 
       // Create step with commands array
@@ -199,7 +154,7 @@ export class Script
         nextStepType: 'none',
       };
       this.#steps.push(step);
-      return new ScriptBuilder(step);
+      return new StepBuilder(step);
     }
 
     // Function step - single function in commands array
@@ -209,7 +164,7 @@ export class Script
       nextStepType: 'none',
     };
     this.#steps.push(step);
-    return new ScriptBuilder(step);
+    return new StepBuilder(step);
   }
 
   /**
@@ -295,37 +250,14 @@ export class Script
   }
 
   /**
-   Get a description for a step, handling both commands and functions.
-   */
-  #getStepDescription(step: Step): string
-  {
-    if (step.options.description)
-    {
-      return step.options.description;
-    }
-
-    if (step.commands.length === 0)
-    {
-      return '[empty step]';
-    }
-
-    const first = step.commands[0];
-    if (typeof first === 'string')
-    {
-      return step.commands.length === 1
-        ? first
-        : `[${step.commands.length} commands]`;
-    }
-
-    return '[function step]';
-  }
-
-  /**
    Check if a step contains only functions (no shell commands).
    */
   #isFunctionStep(step: Step): boolean
   {
-    return step.commands.length > 0 && step.commands.every(cmd => typeof cmd === 'function');
+    return (
+      step.commands.length > 0
+      && step.commands.every((cmd) => typeof cmd === 'function')
+    );
   }
 
   /**
@@ -343,7 +275,7 @@ export class Script
       }
 
       const step = this.#steps[i];
-      const desc = this.#getStepDescription(step);
+      const desc = getStepDescription(step);
       const flags: string[] = [];
 
       if (this.#isFunctionStep(step))
@@ -369,7 +301,9 @@ export class Script
       }
       if (step.nextStepType !== 'none')
       {
-        flags.push(`has ${step.nextStepType === 'or' ? 'fallback' : 'continuation'}`);
+        flags.push(
+          `has ${step.nextStepType === 'or' ? 'fallback' : 'continuation'}`,
+        );
       }
 
       const flagStr = flags.length > 0 ? ` (${flags.join(', ')})` : '';
@@ -404,7 +338,7 @@ export class Script
   /**
    Execute a step chain, following and/or links based on success/failure.
 
-   @returns The StepResult from the final step in the chain
+   @returns The StepResult from the final step in the chain, with chainResults populated
    */
   async #executeStepChain(
     step: Step,
@@ -416,22 +350,46 @@ export class Script
     let lastResult: StepResult | undefined;
     let lastError: Error | undefined;
 
+    // Track how we reached the current step
+    let currentLinkType: ChainLinkType = 'root';
+
+    // Collect results from each step in the chain
+    const chainResults: ChainStepResult[] = [];
+
     while (true)
     {
       try
       {
         lastResult = await runStep(currentStep, index, { captureOutput });
 
+        // Record this step's result in the chain
+        chainResults.push({
+          linkType: currentLinkType,
+          type: lastResult.type,
+          description: lastResult.description,
+          commands: lastResult.commands,
+          status: lastResult.status,
+          startedAt: lastResult.startedAt,
+          finishedAt: lastResult.finishedAt,
+          durationMs: lastResult.durationMs,
+          exitCode: lastResult.exitCode,
+          stdout: lastResult.stdout,
+          stderr: lastResult.stderr,
+          error: lastResult.error,
+        });
+
         // Step succeeded - follow andStep if present
         if (currentStep.nextStepType === 'and')
         {
-          const andDesc = this.#getStepDescription(currentStep.nextStep);
-          console.log(`  → Continuing: ${andDesc}`);
+          const andDesc = getStepDescription(currentStep.nextStep);
+          console.log(`↪️  AND: ${andDesc}`);
           currentStep = currentStep.nextStep;
+          currentLinkType = 'and';
           continue;
         }
 
-        // No continuation - we're done
+        // No continuation - we're done, attach chain results
+        lastResult.chainResults = chainResults;
         return lastResult;
       }
       catch (err: unknown)
@@ -451,8 +409,10 @@ export class Script
               : currentStep.options.interactive
               ? 'interactive'
               : 'command',
-            description: this.#getStepDescription(currentStep),
-            commands: currentStep.commands.filter((c): c is string => typeof c === 'string'),
+            description: getStepDescription(currentStep),
+            commands: currentStep.commands.filter(
+              (c): c is string => typeof c === 'string',
+            ),
             status: 'error',
             startedAt: now,
             finishedAt: now,
@@ -462,12 +422,29 @@ export class Script
         }
         lastError = err instanceof Error ? err : new Error(String(err));
 
+        // Record this step's result in the chain
+        chainResults.push({
+          linkType: currentLinkType,
+          type: lastResult.type,
+          description: lastResult.description,
+          commands: lastResult.commands,
+          status: lastResult.status,
+          startedAt: lastResult.startedAt,
+          finishedAt: lastResult.finishedAt,
+          durationMs: lastResult.durationMs,
+          exitCode: lastResult.exitCode,
+          stdout: lastResult.stdout,
+          stderr: lastResult.stderr,
+          error: lastResult.error,
+        });
+
         // Step failed - follow orStep if present
         if (currentStep.nextStepType === 'or')
         {
-          const orDesc = this.#getStepDescription(currentStep.nextStep);
-          console.log(`  ↻ Attempting fallback: ${orDesc}`);
+          const orDesc = getStepDescription(currentStep.nextStep);
+          console.log(`\n↩️  OR: ${orDesc}`);
           currentStep = currentStep.nextStep;
+          currentLinkType = 'or';
           continue;
         }
 
@@ -476,9 +453,10 @@ export class Script
       }
     }
 
-    // Exhausted all options - throw the last error
+    // Exhausted all options - attach chain results and throw the last error
     if (lastError && lastResult)
     {
+      lastResult.chainResults = chainResults;
       (lastError as Error & { stepResult?: StepResult }).stepResult = lastResult;
       throw lastError;
     }
@@ -578,7 +556,7 @@ export class Script
       }
 
       const step = this.#steps[i];
-      const stepDesc = this.#getStepDescription(step);
+      const stepDesc = getStepDescription(step);
 
       // Run step-level validation if present
       if (step.options.validateFn)
@@ -640,9 +618,15 @@ export class Script
           const now = new Date();
           const skipResult: StepResult = {
             index: i,
-            type: this.#isFunctionStep(step) ? 'function' : step.options.interactive ? 'interactive' : 'command',
+            type: this.#isFunctionStep(step)
+              ? 'function'
+              : step.options.interactive
+              ? 'interactive'
+              : 'command',
             description: stepDesc,
-            commands: step.commands.filter((c): c is string => typeof c === 'string'),
+            commands: step.commands.filter(
+              (c): c is string => typeof c === 'string',
+            ),
             status: 'skipped',
             startedAt: now,
             finishedAt: now,
@@ -722,6 +706,40 @@ export class Script
   }
 
   /**
+   Get a status icon for a step result.
+   */
+  #getStatusIcon(status: string): string
+  {
+    switch (status)
+    {
+      case 'success':
+        return '✓';
+      case 'skipped':
+        return '⏭️';
+      case 'warning':
+        return '⚠️';
+      default:
+        return '✗';
+    }
+  }
+
+  /**
+   Get a link type prefix for chain step display.
+   */
+  #getLinkPrefix(linkType: ChainLinkType): string
+  {
+    switch (linkType)
+    {
+      case 'root':
+        return '';
+      case 'and':
+        return 'AND:  ';
+      case 'or':
+        return 'OR:   ';
+    }
+  }
+
+  /**
    Print an execution summary.
    */
   #printResultsSummary(result: ExecuteResult): void
@@ -735,10 +753,30 @@ export class Script
     const statusText = result.state === 'complete' ? 'Completed' : 'Failed';
     console.log(`\nStatus: ${statusEmoji} ${statusText}`);
 
+    // Count total chain steps executed
+    let totalChainSteps = 0;
+    let successfulChainSteps = 0;
+    for (const sr of result.stepResults)
+    {
+      if (sr.chainResults)
+      {
+        totalChainSteps += sr.chainResults.length;
+        successfulChainSteps += sr.chainResults.filter(c => c.status === 'success').length;
+      }
+      else
+      {
+        totalChainSteps += 1;
+        if (sr.status === 'success') successfulChainSteps += 1;
+      }
+    }
+
     // Stats
+    const chainInfo = result.stepResults.length !== totalChainSteps
+      ? ` (${totalChainSteps} including AND/OR chained steps)`
+      : '';
     const statsLine = result.stepsSkipped > 0
-      ? `Steps: ${result.stepsRun} succeeded, ${result.stepsSkipped} skipped`
-      : `Steps: ${result.stepsRun} succeeded`;
+      ? `Steps: ${result.stepsRun} ${chainInfo}, ${result.stepsSkipped} skipped`
+      : `Steps: ${result.stepsRun} ${chainInfo}`;
     console.log(statsLine);
 
     if (result.totalDurationMs !== undefined)
@@ -746,21 +784,48 @@ export class Script
       console.log(`Duration: ${this.#formatDuration(result.totalDurationMs)}`);
     }
 
-    // Step details
+    // Step details with chain expansion
+    // Format: Left icon = overall chain result, Right icon = individual step result
     if (result.stepResults.length > 0)
     {
       console.log('\nStep Results:');
       for (const sr of result.stepResults)
       {
-        const statusIcon = sr.status === 'success'
-          ? '✓'
-          : sr.status === 'skipped'
-          ? '⏭️'
-          : sr.status === 'warning'
-          ? '⚠️'
-          : '✗';
-        const duration = sr.durationMs > 0 ? ` (${this.#formatDuration(sr.durationMs)})` : '';
-        console.log(`  ${statusIcon} ${sr.index + 1}. ${sr.description}${duration}`);
+        if (sr.chainResults && sr.chainResults.length > 0)
+        {
+          // Show expanded chain results
+          for (const chainStep of sr.chainResults)
+          {
+            const stepIcon = this.#getStatusIcon(chainStep.status);
+            const duration = chainStep.durationMs > 0
+              ? ` (${this.#formatDuration(chainStep.durationMs)})`
+              : '';
+
+            if (chainStep.linkType === 'root')
+            {
+              // Root step: overall chain status on left, step status on right
+              const overallIcon = this.#getStatusIcon(sr.status);
+              console.log(
+                `  ${overallIcon} ${sr.index + 1}. ${chainStep.description}${duration} ${stepIcon}`,
+              );
+            }
+            else
+            {
+              // Chain step: link prefix, step status on right
+              const linkPrefix = this.#getLinkPrefix(chainStep.linkType);
+              console.log(
+                `       ${linkPrefix}${chainStep.description}${duration} ${stepIcon}`,
+              );
+            }
+          }
+        }
+        else
+        {
+          // No chain results - show simple step (status on both sides, same value)
+          const statusIcon = this.#getStatusIcon(sr.status);
+          const duration = sr.durationMs > 0 ? ` (${this.#formatDuration(sr.durationMs)})` : '';
+          console.log(`  ${statusIcon} ${sr.index + 1}. ${sr.description}${duration} ${statusIcon}`);
+        }
       }
     }
 
