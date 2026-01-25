@@ -8,7 +8,7 @@ import { normalizeFileOptions } from './FileOptions.ts';
 import { OutputContext } from './OutputContext.ts';
 import { parseScriptArgs } from './parseScriptArgs.ts';
 import { printBanner } from './printBanner.ts';
-import { getStepDescription, runStep } from './runStep.ts';
+import { getStepDescription, isFunctionStep, runStep } from './runStep.ts';
 import { runValidation } from './runValidation.ts';
 import { splitCommandLines } from './splitCommandLines.ts';
 import type { Step } from './Step.ts';
@@ -293,17 +293,6 @@ export class Script
   }
 
   /**
-   Check if a step contains only functions (no shell commands).
-   */
-  #isFunctionStep(step: Step): boolean
-  {
-    return (
-      step.commands.length > 0
-      && step.commands.every((cmd) => typeof cmd === 'function')
-    );
-  }
-
-  /**
    Print the accumulated plan without executing.
    */
   #printPlan(header = '📋 Execution Plan'): void
@@ -323,7 +312,7 @@ export class Script
       const desc = getStepDescription(step);
       const flags: string[] = [];
 
-      if (this.#isFunctionStep(step))
+      if (isFunctionStep(step))
       {
         flags.push('fn');
       }
@@ -463,7 +452,7 @@ export class Script
           const now = new Date();
           lastResult = {
             index,
-            type: this.#isFunctionStep(currentStep)
+            type: isFunctionStep(currentStep)
               ? 'function'
               : currentStep.options.interactive
               ? 'interactive'
@@ -679,7 +668,7 @@ export class Script
           const now = new Date();
           const skipResult: StepResult = {
             index: i,
-            type: this.#isFunctionStep(step)
+            type: isFunctionStep(step)
               ? 'function'
               : step.options.interactive
               ? 'interactive'
