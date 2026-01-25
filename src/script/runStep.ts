@@ -77,7 +77,7 @@ exit $__exit
       try
       {
         // Small delay to ensure tee has flushed to disk
-        await new Promise(r => setTimeout(r, 10));
+        await new Promise((r) => setTimeout(r, 10));
 
         // Read captured output from temp files
         const stdout = await readFile(stdoutFile, 'utf-8').catch(() => '');
@@ -198,7 +198,7 @@ async function runSingleCommand(
 /**
  Get the description for a step.
  */
-function getStepDescription(step: Step): string
+export function getStepDescription(step: Step): string
 {
   if (step.options.description)
   {
@@ -217,16 +217,25 @@ function getStepDescription(step: Step): string
       ? first
       : `[${step.commands.length} commands]`;
   }
+  const text = typeof first === 'function'
+    ? first.name || first.toString()
+    : '[function step]';
 
-  return '[function step]';
+  const MAX_LENGTH = 80;
+  const suffixToAdd = text.length > MAX_LENGTH ? '...' : '';
+  const result = text.substring(0, MAX_LENGTH).replaceAll('  ', ' ').replaceAll('\n', '↩︎ ') + suffixToAdd;
+  return result;
 }
 
 /**
  Check if a step contains only functions (no shell commands).
  */
-function isFunctionStep(step: Step): boolean
+export function isFunctionStep(step: Step): boolean
 {
-  return step.commands.length > 0 && step.commands.every(cmd => typeof cmd === 'function');
+  return (
+    step.commands.length > 0
+    && step.commands.every((cmd) => typeof cmd === 'function')
+  );
 }
 
 /**
@@ -257,7 +266,7 @@ export async function runStep(
     ? 'interactive'
     : 'command';
 
-  console.log(`▶ ${desc}`);
+  console.log(`\n🚀 ${desc}\n`);
 
   // Show individual commands if we have a description
   if (stepOptions.description && commands.length > 0)
@@ -283,7 +292,9 @@ export async function runStep(
   let error: Error | undefined;
 
   // Collect string commands for result
-  const commandStrings = commands.filter((c): c is string => typeof c === 'string');
+  const commandStrings = commands.filter(
+    (c): c is string => typeof c === 'string',
+  );
 
   try
   {
@@ -310,14 +321,18 @@ export async function runStep(
         {
           if (stepOptions.onError === 'warn')
           {
-            console.warn(`⚠️  Command failed with exit code ${result.exitCode}: ${cmd}`);
+            console.warn(
+              `⚠️  Command failed with exit code ${result.exitCode}: ${cmd}`,
+            );
             status = 'warning';
             // Continue to next command in warn mode
           }
           else
           {
             // Default: fail mode - throw and stop
-            throw new Error(`Command failed with exit code ${result.exitCode}: ${cmd}`);
+            throw new Error(
+              `Command failed with exit code ${result.exitCode}: ${cmd}`,
+            );
           }
         }
       }
@@ -351,19 +366,23 @@ export async function runStep(
           {
             if (stepOptions.onError === 'warn')
             {
-              console.warn(`⚠️  Function returned non-zero exit code: ${fnResult}`);
+              console.warn(
+                `⚠️  Function returned non-zero exit code: ${fnResult}`,
+              );
               status = 'warning';
             }
             else
             {
-              throw new Error(`Function returned non-zero exit code: ${fnResult}`);
+              throw new Error(
+                `Function returned non-zero exit code: ${fnResult}`,
+              );
             }
           }
         }
       }
     }
 
-    console.log('✓ Done\n');
+    console.log('');
   }
   catch (err: unknown)
   {
@@ -420,7 +439,11 @@ if (import.meta.main)
   console.log('-> executing ./src/script/runStep.ts');
 
   // Exercise the function with a simple step
-  const testStep: Step = { commands: ['echo "runStep test"'], options: {}, nextStepType: 'none' };
+  const testStep: Step = {
+    commands: ['echo "runStep test"'],
+    options: {},
+    nextStepType: 'none',
+  };
   runStep(testStep, 0, { captureOutput: true }).then((result) =>
   {
     console.log('runStep() completed with result:');

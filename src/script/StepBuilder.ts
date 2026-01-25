@@ -21,7 +21,7 @@ import type { StepFn } from './StepFn.ts';
      .and(`git push -u origin main`);
  ```
  */
-export class ScriptBuilder
+export class StepBuilder
 {
   #step: Step;
 
@@ -139,10 +139,10 @@ export class ScriptBuilder
   /**
    Create a continuation step that runs if this step succeeds. Like shell's `&&` operator.
 
-   Returns a new ScriptBuilder for configuring the continuation step. The new step has its own cwd, env, description, etc.
+   Returns a new StepBuilder for configuring the continuation step. The new step has its own cwd, env, description, etc.
 
    @param cmdOrFn - Shell command string (can be multi-line) or function for the continuation
-   @returns ScriptBuilder for the continuation step
+   @returns StepBuilder for the continuation step
 
    @example
    ```ts
@@ -152,7 +152,7 @@ export class ScriptBuilder
      .and("npm test");
    ```
    */
-  and(cmdOrFn: string | StepFn): ScriptBuilder
+  and(cmdOrFn: string | StepFn): StepBuilder
   {
     // Create the continuation step
     const andStep: Step = {
@@ -186,16 +186,16 @@ export class ScriptBuilder
     (this.#step as { nextStepType: 'and' }).nextStepType = 'and';
 
     // Return builder for the andStep
-    return new ScriptBuilder(andStep);
+    return new StepBuilder(andStep);
   }
 
   /**
    Create a fallback step that runs if this step fails. Like shell's `||` operator.
 
-   Returns a new ScriptBuilder for configuring the fallback step. The fallback step has its own cwd, env, description, etc.
+   Returns a new StepBuilder for configuring the fallback step. The fallback step has its own cwd, env, description, etc.
 
    @param cmdOrFn - Shell command string (can be multi-line) or function for the fallback
-   @returns ScriptBuilder for the fallback step
+   @returns StepBuilder for the fallback step
 
    @example
    ```ts
@@ -206,7 +206,7 @@ export class ScriptBuilder
      .or(() => console.log("giving up"));
    ```
    */
-  or(cmdOrFn: string | StepFn): ScriptBuilder
+  or(cmdOrFn: string | StepFn): StepBuilder
   {
     // Create the fallback step
     const orStep: Step = {
@@ -239,19 +239,19 @@ export class ScriptBuilder
     (this.#step as { nextStepType: 'or' }).nextStepType = 'or';
 
     // Return builder for the orStep
-    return new ScriptBuilder(orStep);
+    return new StepBuilder(orStep);
   }
 }
 
 if (import.meta.main)
 {
-  console.log('-> executing ./src/script/ScriptBuilder.ts');
+  console.log('-> executing ./src/script/StepBuilder.ts');
 
   // Minimal exercise of the code
   const mockStep: Step = { commands: ['echo test'], options: {}, nextStepType: 'none' };
-  const builder = new ScriptBuilder(mockStep);
+  const builder = new StepBuilder(mockStep);
   builder.description('test').cwd('/tmp');
-  console.log('ScriptBuilder created and configured successfully');
+  console.log('StepBuilder created and configured successfully');
 
-  console.log('<- executed ./src/script/ScriptBuilder.ts');
+  console.log('<- executed ./src/script/StepBuilder.ts');
 }
