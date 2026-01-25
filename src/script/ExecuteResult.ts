@@ -54,6 +54,6 @@ export interface ExecuteResult
 if (import.meta.main)
 {
   console.log('-> executing ./src/script/ExecuteResult.ts');
-  console.log('Exported types: ExecuteResult');
+  console.log('Exported types: ExecuteResult, ScriptState');
   console.log('<- executed ./src/script/ExecuteResult.ts');
 }
