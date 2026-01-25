@@ -2,6 +2,9 @@
 
 import process from 'node:process';
 
+import type { OutputContext } from './OutputContext.ts';
+import { defaultOutputContext } from './OutputContext.ts';
+
 /**
  Get the display width of a string, accounting for wide characters (emoji, CJK, etc.).
 
@@ -71,14 +74,17 @@ function getDisplayWidth(text: string): number
 
 /**
  Print a prominent banner to the console.
+
+ @param text - The text to display in the banner
+ @param ctx - Optional OutputContext for routing output (defaults to terminal)
  */
-export function printBanner(text: string): void
+export function printBanner(text: string, ctx: OutputContext = defaultOutputContext): void
 {
   const width = getDisplayWidth(text);
   const line = '═'.repeat(width + 4);
-  console.log(`\n${line}`);
-  console.log(`║ ${text} ║`);
-  console.log(`${line}\n`);
+  ctx.log(`\n${line}`);
+  ctx.log(`║ ${text} ║`);
+  ctx.log(`${line}`);
 }
 
 if (import.meta.main)
