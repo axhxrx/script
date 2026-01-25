@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 
 import { getPathToRepoRoot } from '../../tools/getPathToRepoRoot.ts';
-import { getFileInfo } from './getFileInfo';
+import { getFileInfo } from './getFileInfo.ts';
 
 describe('getFileInfo', () =>
 {
