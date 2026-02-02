@@ -8,7 +8,7 @@ import { normalizeFileOptions } from './FileOptions.ts';
 import { OutputContext } from './OutputContext.ts';
 import { parseScriptArgs } from './parseScriptArgs.ts';
 import { printBanner } from './printBanner.ts';
-import { getStepDescription, isFunctionStep, runStep } from './runStep.ts';
+import { getCommandDescription, getStepDescription, isFunctionStep, runStep } from './runStep.ts';
 import { runValidation } from './runValidation.ts';
 import { splitCommandLines } from './splitCommandLines.ts';
 import type { Step } from './Step.ts';
@@ -348,13 +348,15 @@ export class Script
       {
         for (const cmd of step.commands)
         {
+          const cmdDesc = getCommandDescription(cmd);
+
           if (typeof cmd === 'string')
           {
             ctx.log(`     └─ ${cmd}`);
           }
           else
           {
-            ctx.log(`     └─ [function]`);
+            ctx.log(`     └─ ${cmdDesc}`);
           }
         }
       }
