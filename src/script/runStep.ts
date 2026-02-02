@@ -218,6 +218,31 @@ async function runSingleCommand(
 }
 
 /**
+ Get a description for an individual command (string or function).
+ */
+export function getCommandDescription(cmd: string | (() => unknown)): string
+{
+  if (typeof cmd === 'string')
+  {
+    return cmd;
+  }
+
+  // It's a function - try to get a meaningful name
+  const name = cmd.name;
+  if (name && name !== 'anonymous' && name !== '')
+  {
+    return `[function: ${name}]`;
+  }
+
+  // Fall back to stringifying the function (truncated)
+  const text = cmd.toString();
+  const MAX_LENGTH = 60;
+  const suffixToAdd = text.length > MAX_LENGTH ? '...' : '';
+  const result = text.substring(0, MAX_LENGTH).replaceAll('  ', ' ').replaceAll('\n', ' ') + suffixToAdd;
+  return `[${result}]`;
+}
+
+/**
  Get the description for a step.
  */
 export function getStepDescription(step: Step): string
@@ -239,14 +264,10 @@ export function getStepDescription(step: Step): string
       ? first
       : `[${step.commands.length} commands]`;
   }
-  const text = typeof first === 'function'
-    ? first.name || first.toString()
-    : '[function step]';
 
-  const MAX_LENGTH = 80;
-  const suffixToAdd = text.length > MAX_LENGTH ? '...' : '';
-  const result = text.substring(0, MAX_LENGTH).replaceAll('  ', ' ').replaceAll('\n', '↩︎ ') + suffixToAdd;
-  return result;
+  return step.commands.length === 1
+    ? getCommandDescription(first)
+    : `[${step.commands.length} commands]`;
 }
 
 /**
@@ -297,13 +318,14 @@ export async function runStep(
   {
     for (const cmd of commands)
     {
+      const cmdDesc = getCommandDescription(cmd);
       if (typeof cmd === 'string')
       {
         ctx.log(`  $ ${cmd}`);
       }
       else
       {
-        ctx.log(`  [function]`);
+        ctx.log(`  ${cmdDesc}`);
       }
     }
   }
