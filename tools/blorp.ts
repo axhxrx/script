@@ -1,6 +1,6 @@
 import { Script } from '@axhxrx/script';
 
-function performImageAnalysis(path: string)
+function performImageAnalysis(_path: string)
 {
   return '0.32';
 }

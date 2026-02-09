@@ -48,7 +48,7 @@ script.add('exit 1')
   .and('echo "STEP3_CONTINUED"');
 
 // Step 4: Function step with console.log (should be captured when file logging active)
-script.add(async () =>
+script.add(() =>
 {
   console.log('FUNCTION_CONSOLE_LOG');
   console.warn('FUNCTION_CONSOLE_WARN');
