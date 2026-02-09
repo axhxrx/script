@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { add, execute, parseScriptArgs, Script } from '@axhxrx/script';
+// import { add, execute, parseScriptArgs, Script } from '@axhxrx/script';
+import { Script } from '@axhxrx/script';
 
 // const options: any = parseScriptArgs();
 // const { repoName, subpath } = options;
@@ -46,7 +47,7 @@ import { add, execute, parseScriptArgs, Script } from '@axhxrx/script';
 // //   .then(`~/bin/something_else.sh`); // runs only if previous step succeeded
 
 // add("git push -u origin main").description("Push to GitHub").cwd(pathToNewRepo);
-async function niggledermus()
+function niggledermus()
 {
   return 0;
 }

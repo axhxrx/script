@@ -6,7 +6,7 @@
  - boolean: true for success, false for failure
  - number: exit code (0 for success, non-zero for failure)
  */
-export type StepFn = () => void | Promise<void | boolean | number>;
+export type StepFn = () => void | boolean | number | Promise<void | boolean | number>;
 
 if (import.meta.main)
 {
