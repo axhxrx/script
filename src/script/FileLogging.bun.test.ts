@@ -266,6 +266,24 @@ describe('Script.file()', () =>
     const content = await readFile(path!, 'utf-8');
     expect(content).toContain('TEMP_FILE_TEST');
   });
+
+  test('preserves validation progress lines in script-level logs', async () =>
+  {
+    const path = tempPath('script-validations');
+    filesToCleanup.push(path);
+
+    const script = new Script();
+    await script.file({ path, mode: 'overwrite' });
+    script.validate('Always passes', () => true);
+    script.add('echo "VALIDATION_LOG_TEST"');
+
+    await script.execute({ yes: true, printResults: false });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const content = await readFile(path, 'utf-8');
+    expect(content).toContain('○ Always passes... ✓');
+    expect(content).toContain('VALIDATION_LOG_TEST');
+  });
 });
 
 describe('StepBuilder.file()', () =>

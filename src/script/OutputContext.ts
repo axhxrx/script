@@ -57,7 +57,9 @@ export class OutputContext
    @param options - File options (path, mode, output, redact, timestamps, stderr)
    @returns The actual file path being written to
    */
-  async setFile(options?: string | boolean | FileOptions): Promise<string | undefined>
+  async setFile(
+    options?: string | boolean | FileOptions,
+  ): Promise<string | undefined>
   {
     const normalized = normalizeFileOptions(options);
     if (!normalized)
@@ -90,7 +92,9 @@ export class OutputContext
       const lastDot = this.#filePath.lastIndexOf('.');
       if (lastDot > 0)
       {
-        this.#stderrFilePath = this.#filePath.slice(0, lastDot) + '.stderr' + this.#filePath.slice(lastDot);
+        this.#stderrFilePath = this.#filePath.slice(0, lastDot)
+          + '.stderr'
+          + this.#filePath.slice(lastDot);
       }
       else
       {
@@ -143,12 +147,15 @@ export class OutputContext
     {
       const timestamp = new Date().toISOString();
       // Prefix each line with timestamp
-      output = output.split('\n').map((line, i, arr) =>
-      {
-        // Don't add timestamp to empty trailing line from split
-        if (i === arr.length - 1 && line === '') return '';
-        return `[${timestamp}] ${line}`;
-      }).join('\n');
+      output = output
+        .split('\n')
+        .map((line, i, arr) =>
+        {
+          // Don't add timestamp to empty trailing line from split
+          if (i === arr.length - 1 && line === '') return '';
+          return `[${timestamp}] ${line}`;
+        })
+        .join('\n');
     }
 
     // Handle stderr
@@ -162,11 +169,14 @@ export class OutputContext
       else if (this.#fileOptions?.stderr === 'prefixed')
       {
         // Prefix each line with [STDERR]
-        output = output.split('\n').map((line, i, arr) =>
-        {
-          if (i === arr.length - 1 && line === '') return '';
-          return `[STDERR] ${line}`;
-        }).join('\n');
+        output = output
+          .split('\n')
+          .map((line, i, arr) =>
+          {
+            if (i === arr.length - 1 && line === '') return '';
+            return `[STDERR] ${line}`;
+          })
+          .join('\n');
       }
       // 'interleaved' - just write as-is
     }
@@ -179,13 +189,37 @@ export class OutputContext
    */
   #queueWrite(text: string, isStderr: boolean = false): void
   {
-    this.#writeQueue = this.#writeQueue.then(async () =>
+    this.#writeQueue = this.#writeQueue
+      .then(async () =>
+      {
+        await this.#doWriteToFile(text, isStderr);
+      })
+      .catch(() =>
+      {
+        // Silently ignore write errors
+      });
+  }
+
+  /**
+   Flush any buffered partial line before the next queued file write.
+
+   This preserves the terminal-visible ordering for patterns like:
+   ```ts
+     ctx.write('Validating... ');
+     ctx.log('✓');
+   ```
+   */
+  #flushPartialLine(addNewline: boolean = false): void
+  {
+    if (!this.#partialLine)
     {
-      await this.#doWriteToFile(text, isStderr);
-    }).catch(() =>
-    {
-      // Silently ignore write errors
-    });
+      return;
+    }
+
+    const text = addNewline ? this.#partialLine + '\n' : this.#partialLine;
+
+    this.#partialLine = '';
+    this.#queueWrite(text);
   }
 
   /**
@@ -204,6 +238,7 @@ export class OutputContext
     // Only write to file if output mode is 'full' (default)
     if (this.#filePath && this.#fileOptions?.output !== 'command')
     {
+      this.#flushPartialLine();
       this.#queueWrite(message + '\n');
     }
   }
@@ -221,6 +256,7 @@ export class OutputContext
 
     if (this.#filePath && this.#fileOptions?.output !== 'command')
     {
+      this.#flushPartialLine();
       this.#queueWrite(message + '\n', true);
     }
   }
@@ -238,6 +274,7 @@ export class OutputContext
 
     if (this.#filePath && this.#fileOptions?.output !== 'command')
     {
+      this.#flushPartialLine();
       this.#queueWrite(message + '\n', true);
     }
   }
@@ -256,6 +293,7 @@ export class OutputContext
 
     if (this.#filePath)
     {
+      this.#flushPartialLine();
       this.#queueWrite(text);
     }
   }
@@ -274,6 +312,7 @@ export class OutputContext
 
     if (this.#filePath)
     {
+      this.#flushPartialLine();
       this.#queueWrite(text, true);
     }
   }
@@ -315,6 +354,7 @@ export class OutputContext
   {
     if (this.#filePath)
     {
+      this.#flushPartialLine();
       this.#queueWrite(text);
     }
   }
@@ -328,6 +368,7 @@ export class OutputContext
   {
     if (this.#filePath)
     {
+      this.#flushPartialLine();
       this.#queueWrite(text, true);
     }
   }
@@ -342,8 +383,7 @@ export class OutputContext
     // Flush any remaining partial line (from write() calls)
     if (this.#partialLine)
     {
-      this.#queueWrite(this.#partialLine + '\n');
-      this.#partialLine = '';
+      this.#flushPartialLine(true);
     }
 
     // Wait for all pending writes to complete
