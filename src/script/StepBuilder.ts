@@ -205,8 +205,17 @@ export class StepBuilder
       andStep.commands.push(cmdOrFn);
     }
 
-    // Mutate the current step to add nextStep
-    // TypeScript sees this as a discriminated union, but at runtime we can mutate
+    // HACK: Step is a discriminated union (and|or|none) so that downstream consumers get
+    // exhaustive narrowing when they switch on nextStepType — e.g. when nextStepType is
+    // 'none', TypeScript proves nextStep doesn't exist, so they can't accidentally access
+    // it. That's a real benefit worth preserving. But here in the builder, we need to
+    // mutate a Step that was born as 'none' into 'and'. The `as` casts lie to the compiler
+    // about the current shape while we fix it up. This is safe because both assignments are
+    // synchronous with nothing between them, and no other code can observe the intermediate
+    // state. Verified 2026-03-28: all creation sites start as 'none', all mutation sites
+    // (here and in .or()) set both fields atomically, all read sites check nextStepType
+    // before accessing nextStep. If you add a new variant or a new creation/mutation site,
+    // re-verify this invariant.
     (this.#step as { nextStep: Step; nextStepType: 'and' }).nextStep = andStep;
     (this.#step as { nextStepType: 'and' }).nextStepType = 'and';
 
@@ -250,7 +259,7 @@ export class StepBuilder
       orStep.commands.push(cmdOrFn);
     }
 
-    // Mutate the current step to add nextStep
+    // Same discriminated-union mutation hack as in .and() — see comment there.
     (this.#step as { nextStep: Step; nextStepType: 'or' }).nextStep = orStep;
     (this.#step as { nextStepType: 'or' }).nextStepType = 'or';
 

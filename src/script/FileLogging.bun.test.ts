@@ -26,7 +26,8 @@ afterEach(async () =>
 {
   for (const file of filesToCleanup)
   {
-    await unlink(file).catch(() => {});
+    await unlink(file).catch(() =>
+    {});
   }
   filesToCleanup.length = 0;
 });
@@ -93,7 +94,8 @@ describe('autoRedact patterns', () =>
 
   test('redacts JWT tokens', () =>
   {
-    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
+    const jwt =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';
     expect(autoRedact(jwt)).toBe('[REDACTED_JWT]');
   });
 

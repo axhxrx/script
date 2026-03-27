@@ -175,10 +175,10 @@ exit $__exit
 function runCommandWithCapture(
   command: string,
   options: {
-    cwd?: string
-    env?: Record<string, string>
-    ctx?: OutputContext
-    interactiveStdin?: boolean
+    cwd?: string;
+    env?: Record<string, string>;
+    ctx?: OutputContext;
+    interactiveStdin?: boolean;
   },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }>
 {

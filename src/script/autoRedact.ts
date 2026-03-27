@@ -24,7 +24,8 @@ const AUTO_REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
 
   // PEM private keys
   {
-    pattern: /-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE KEY-----[\s\S]*?-----END\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE KEY-----/gi,
+    pattern:
+      /-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE KEY-----[\s\S]*?-----END\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE KEY-----/gi,
     replacement: '[REDACTED_PRIVATE_KEY]',
   },
 
@@ -124,7 +125,11 @@ if (import.meta.main)
   {
     const redacted = autoRedact(test);
     const changed = test !== redacted;
-    console.log(`${changed ? '✓' : '○'} "${test.substring(0, 50)}${test.length > 50 ? '...' : ''}" → "${redacted.substring(0, 50)}${redacted.length > 50 ? '...' : ''}"`);
+    console.log(
+      `${changed ? '✓' : '○'} "${test.substring(0, 50)}${test.length > 50 ? '...' : ''}" → "${
+        redacted.substring(0, 50)
+      }${redacted.length > 50 ? '...' : ''}"`,
+    );
   }
 
   console.log('<- executed ./src/script/autoRedact.ts');

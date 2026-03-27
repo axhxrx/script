@@ -18,6 +18,24 @@ import type { StepOptions } from './StepOptions.ts';
 import type { ChainLinkType, ChainStepResult, StepResult } from './StepResult.ts';
 import type { Validation } from './Validation.ts';
 
+function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepResult
+{
+  return {
+    linkType,
+    type: result.type,
+    description: result.description,
+    commands: result.commands,
+    status: result.status,
+    startedAt: result.startedAt,
+    finishedAt: result.finishedAt,
+    durationMs: result.durationMs,
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    error: result.error,
+  };
+}
+
 /**
  A Script encapsulates steps, validations, and banners for a scripted workflow.
 
@@ -412,21 +430,7 @@ export class Script
           outputContext: currentStepCtx,
         });
 
-        // Record this step's result in the chain
-        chainResults.push({
-          linkType: currentLinkType,
-          type: lastResult.type,
-          description: lastResult.description,
-          commands: lastResult.commands,
-          status: lastResult.status,
-          startedAt: lastResult.startedAt,
-          finishedAt: lastResult.finishedAt,
-          durationMs: lastResult.durationMs,
-          exitCode: lastResult.exitCode,
-          stdout: lastResult.stdout,
-          stderr: lastResult.stderr,
-          error: lastResult.error,
-        });
+        chainResults.push(toChainResult(currentLinkType, lastResult));
 
         // Step succeeded - follow andStep if present
         if (currentStep.nextStepType === 'and')
@@ -472,21 +476,7 @@ export class Script
         }
         lastError = err instanceof Error ? err : new Error(String(err));
 
-        // Record this step's result in the chain
-        chainResults.push({
-          linkType: currentLinkType,
-          type: lastResult.type,
-          description: lastResult.description,
-          commands: lastResult.commands,
-          status: lastResult.status,
-          startedAt: lastResult.startedAt,
-          finishedAt: lastResult.finishedAt,
-          durationMs: lastResult.durationMs,
-          exitCode: lastResult.exitCode,
-          stdout: lastResult.stdout,
-          stderr: lastResult.stderr,
-          error: lastResult.error,
-        });
+        chainResults.push(toChainResult(currentLinkType, lastResult));
 
         // Step failed - follow orStep if present
         if (currentStep.nextStepType === 'or')
