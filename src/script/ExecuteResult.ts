@@ -16,9 +16,14 @@ export interface ExecuteResult
   executed: boolean;
 
   /**
-   Number of steps that ran successfully.
+   Number of top-level planned steps that completed successfully.
    */
   stepsRun: number;
+
+  /**
+   Total number of concrete steps that actually executed, including chained `AND`/`OR` steps recorded in `chainResults`.
+   */
+  totalStepsRun: number;
 
   /**
    Number of steps that were skipped.

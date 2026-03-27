@@ -302,6 +302,8 @@ describe('Script.execute() state and stepResults', () =>
 
     expect(result.state).toBe('complete');
     expect(result.executed).toBe(true);
+    expect(result.stepsRun).toBe(1);
+    expect(result.totalStepsRun).toBe(1);
     expect(result.stepResults.length).toBe(1);
     expect(result.stepResults[0].status).toBe('success');
   });
@@ -975,6 +977,8 @@ describe('chainResults tracking', () =>
     const result = await script.execute({ yes: true, printResults: false });
 
     expect(result.state).toBe('complete');
+    expect(result.stepsRun).toBe(1);
+    expect(result.totalStepsRun).toBe(3);
     const chain = result.stepResults[0].chainResults;
     expect(chain?.length).toBe(3);
     expect(chain?.[0].linkType).toBe('root');
@@ -1072,6 +1076,8 @@ describe('chainResults tracking', () =>
     const result = await script.execute({ yes: true, printResults: false });
 
     expect(result.state).toBe('failed');
+    expect(result.stepsRun).toBe(0);
+    expect(result.totalStepsRun).toBe(2);
     const chain = result.stepResults[0].chainResults;
     expect(chain?.length).toBe(2);
     expect(chain?.[0].status).toBe('success');

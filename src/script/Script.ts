@@ -547,6 +547,7 @@ export class Script
     const result: ExecuteResult = {
       executed: false,
       stepsRun: 0,
+      totalStepsRun: 0,
       stepsSkipped: 0,
       aborted: false,
       state: 'planning',
@@ -696,6 +697,7 @@ export class Script
         const stepResult = await this.#executeStepChain(step, i, captureOutput);
         this.#stepResults.push(stepResult);
         result.stepsRun++;
+        result.totalStepsRun += this.#getExecutedStepCount(stepResult);
         result.executed = true; // Only true after at least one step completes
       }
       catch (error: unknown)
@@ -705,6 +707,7 @@ export class Script
         if (errWithResult.stepResult)
         {
           this.#stepResults.push(errWithResult.stepResult);
+          result.totalStepsRun += this.#getExecutedStepCount(errWithResult.stepResult);
         }
 
         // Capture the error so callers can inspect it while still having access to partial results
@@ -792,6 +795,24 @@ export class Script
   }
 
   /**
+   Get the number of concrete executed steps represented by a top-level result.
+   */
+  #getExecutedStepCount(stepResult: StepResult): number
+  {
+    if (stepResult.status === 'skipped')
+    {
+      return 0;
+    }
+
+    if (stepResult.chainResults && stepResult.chainResults.length > 0)
+    {
+      return stepResult.chainResults.length;
+    }
+
+    return 1;
+  }
+
+  /**
    Print an execution summary.
    */
   #printResultsSummary(result: ExecuteResult): void
@@ -807,30 +828,13 @@ export class Script
     const statusText = result.state === 'complete' ? 'Completed' : 'Failed';
     ctx.log(`\nStatus: ${statusEmoji} ${statusText}`);
 
-    // Count total chain steps executed
-    let totalChainSteps = 0;
-    let successfulChainSteps = 0;
-    for (const sr of result.stepResults)
-    {
-      if (sr.chainResults)
-      {
-        totalChainSteps += sr.chainResults.length;
-        successfulChainSteps += sr.chainResults.filter(c => c.status === 'success').length;
-      }
-      else
-      {
-        totalChainSteps += 1;
-        if (sr.status === 'success') successfulChainSteps += 1;
-      }
-    }
-
     // Stats
-    const chainInfo = result.stepResults.length !== totalChainSteps
-      ? ` (${totalChainSteps} including AND/OR chained steps)`
+    const chainInfo = result.totalStepsRun !== result.stepsRun
+      ? `, ${result.totalStepsRun} total executed`
       : '';
     const statsLine = result.stepsSkipped > 0
-      ? `Steps: ${result.stepsRun} ${chainInfo}, ${result.stepsSkipped} skipped`
-      : `Steps: ${result.stepsRun} ${chainInfo}`;
+      ? `Steps: ${result.stepsRun} top-level${chainInfo}, ${result.stepsSkipped} skipped`
+      : `Steps: ${result.stepsRun} top-level${chainInfo}`;
     ctx.log(statsLine);
 
     if (result.totalDurationMs !== undefined)
