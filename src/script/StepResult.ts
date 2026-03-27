@@ -69,12 +69,12 @@ export interface ChainStepResult
   exitCode?: number;
 
   /**
-   Captured stdout output. Only present for non-interactive command steps when capture is enabled.
+   Captured stdout output when output capture was possible. Usually present for command steps, and may also be available for interactive steps when file logging is enabled.
    */
   stdout?: string;
 
   /**
-   Captured stderr output.
+   Captured stderr output when output capture was possible.
    */
   stderr?: string;
 
@@ -136,7 +136,9 @@ export interface StepResult
   exitCode?: number;
 
   /**
-   Captured stdout output. Only present for non-interactive command steps when capture is enabled (default).
+   Captured stdout output when output capture was possible.
+   Usually present for command steps, and may also be available for
+   interactive steps when file logging is enabled.
    */
   stdout?: string;
 

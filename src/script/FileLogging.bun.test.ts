@@ -284,6 +284,24 @@ describe('Script.file()', () =>
     expect(content).toContain('○ Always passes... ✓');
     expect(content).toContain('VALIDATION_LOG_TEST');
   });
+
+  test('captures interactive step output in script-level logs', async () =>
+  {
+    const path = tempPath('script-interactive');
+    filesToCleanup.push(path);
+
+    const script = new Script();
+    await script.file({ path, mode: 'overwrite' });
+    script.add('node -e "process.stdout.write(\'INTERACTIVE_FILE_TEST\\\\n\')"', {
+      interactive: true,
+    });
+
+    await script.execute({ yes: true, printResults: false });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const content = await readFile(path, 'utf-8');
+    expect(content).toContain('INTERACTIVE_FILE_TEST');
+  });
 });
 
 describe('StepBuilder.file()', () =>

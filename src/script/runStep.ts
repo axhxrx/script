@@ -116,7 +116,12 @@ exit $__exit
  */
 function runCommandWithCapture(
   command: string,
-  options: { cwd?: string; env?: Record<string, string>; ctx?: OutputContext },
+  options: {
+    cwd?: string
+    env?: Record<string, string>
+    ctx?: OutputContext
+    interactiveStdin?: boolean
+  },
 ): Promise<{ exitCode: number; stdout: string; stderr: string }>
 {
   const ctx = options.ctx ?? defaultOutputContext;
@@ -127,6 +132,9 @@ function runCommandWithCapture(
       shell: true,
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
+      stdio: options.interactiveStdin
+        ? ['inherit', 'pipe', 'pipe']
+        : ['pipe', 'pipe', 'pipe'],
     });
 
     const stdoutDecoder = new TextDecoder('utf-8', { fatal: false });
@@ -134,14 +142,23 @@ function runCommandWithCapture(
     let stdout = '';
     let stderr = '';
 
-    child.stdout.on('data', (data: Uint8Array) =>
+    const childStdout = child.stdout;
+    const childStderr = child.stderr;
+
+    if (!childStdout || !childStderr)
+    {
+      reject(new Error('Failed to capture child process output streams.'));
+      return;
+    }
+
+    childStdout.on('data', (data: Uint8Array) =>
     {
       const text = stdoutDecoder.decode(data, { stream: true });
       ctx.stdout(text); // Stream to terminal and file
       stdout += text; // Capture
     });
 
-    child.stderr.on('data', (data: Uint8Array) =>
+    childStderr.on('data', (data: Uint8Array) =>
     {
       const text = stderrDecoder.decode(data, { stream: true });
       ctx.stderr(text); // Stream to terminal and file
@@ -172,8 +189,28 @@ async function runSingleCommand(
 {
   if (stepOptions.interactive)
   {
+    // Interactive commands normally get direct terminal control. If file logging
+    // is enabled, switch to a capture path so command output still reaches the
+    // log file while stdin remains interactive.
+    if (ctx.filePath)
+    {
+      if (isUnix)
+      {
+        return await runCommandWithTee(command, {
+          cwd: stepOptions.cwd,
+          env: stepOptions.env,
+        });
+      }
+
+      return await runCommandWithCapture(command, {
+        cwd: stepOptions.cwd,
+        env: stepOptions.env,
+        ctx,
+        interactiveStdin: true,
+      });
+    }
+
     // Use spawnSync for interactive commands (browser auth flows, etc.)
-    // Cannot capture output because stdio: 'inherit' hands terminal to child
     const result = spawnSync(command, {
       stdio: 'inherit',
       cwd: stepOptions.cwd,
