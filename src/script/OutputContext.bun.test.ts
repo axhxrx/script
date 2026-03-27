@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile, unlink } from 'node:fs/promises';
+import { mkdir, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -128,7 +128,10 @@ describe('setFile mode: increment', () =>
 {
   test('creates a unique filename based on the given path', async () =>
   {
-    const basePath = tempPath('increment');
+    // writeNewFile resolves relative to CWD, so use a relative path
+    const dir = `.tmp-test-${randomUUID()}`;
+    await mkdir(dir, { recursive: true });
+    const basePath = join(dir, 'increment.log');
 
     const ctx = new OutputContext(false);
     const actualPath = await ctx.setFile({ path: basePath, mode: 'increment' });
@@ -136,7 +139,6 @@ describe('setFile mode: increment', () =>
     expect(actualPath).toBeDefined();
     // writeNewFile creates a unique name — it won't be exactly basePath
     expect(actualPath).not.toBe(basePath);
-    expect(actualPath!).toContain(tmpdir());
     filesToCleanup.push(actualPath!);
 
     ctx.log('increment test');
@@ -144,6 +146,10 @@ describe('setFile mode: increment', () =>
 
     const content = await readFile(actualPath!, 'utf-8');
     expect(content).toContain('increment test');
+
+    // Clean up temp files and directory
+    await rm(dir, { recursive: true, force: true }).catch(() =>
+    {});
   });
 });
 
