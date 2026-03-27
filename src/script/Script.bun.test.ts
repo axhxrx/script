@@ -367,6 +367,28 @@ describe('Script.execute() state and stepResults', () =>
     expect(result.stepResults[0].stdout).toBeUndefined();
   });
 
+  test('Unix capture path reports missing tee clearly', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    script.add('echo test').env({ PATH: '' });
+
+    const result = await script.execute({
+      yes: true,
+      printResults: false,
+      captureOutput: true,
+    });
+
+    expect(result.state).toBe('failed');
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('bash and tee');
+    expect(result.error?.message).toContain('Could not find tee');
+  });
+
   test('printResults: false suppresses summary', async () =>
   {
     const script = new Script();

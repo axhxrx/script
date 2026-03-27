@@ -33,6 +33,27 @@ export interface RunStepOptions
  Check if we're on a Unix-like platform (macOS, Linux, etc.)
  */
 const isUnix = process.platform !== 'win32';
+const unixCaptureRequirementsMessage = 'Unix output capture requires bash and tee on PATH.';
+
+/**
+ Create a clearer error when Unix tee-based capture cannot start.
+ */
+function getUnixCaptureShellError(error: unknown): Error
+{
+  if (
+    typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as NodeJS.ErrnoException).code === 'ENOENT'
+  )
+  {
+    return new Error(
+      `${unixCaptureRequirementsMessage} Could not start bash for tee-based output capture.`,
+    );
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
 
 /**
  Create a unique temp file path for capturing output.
@@ -65,6 +86,11 @@ async function runCommandWithTee(
   // The `wait` ensures tee processes complete before bash exits.
   // Exit code is captured before wait (which returns 0).
   const wrappedCmd = `
+if ! command -v tee >/dev/null 2>&1; then
+  echo "${unixCaptureRequirementsMessage} Could not find tee for tee-based output capture." >&2
+  printf '%s\\n' "${unixCaptureRequirementsMessage} Could not find tee for tee-based output capture." >> "${stderrFile}"
+  exit 127
+fi
 exec > >(tee "${stdoutFile}") 2> >(tee "${stderrFile}" >&2)
 ${command}
 __exit=$?
@@ -74,6 +100,22 @@ exit $__exit
 
   return new Promise((resolve, reject) =>
   {
+    let settled = false;
+
+    const rejectOnce = async (error: unknown) =>
+    {
+      if (settled)
+      {
+        return;
+      }
+      settled = true;
+      await unlink(stdoutFile).catch(() =>
+      {});
+      await unlink(stderrFile).catch(() =>
+      {});
+      reject(getUnixCaptureShellError(error));
+    };
+
     const child = spawn('bash', ['-c', wrappedCmd], {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
@@ -82,8 +124,15 @@ exit $__exit
 
     child.on('close', async (code) =>
     {
+      if (settled)
+      {
+        return;
+      }
+
       try
       {
+        settled = true;
+
         // Small delay to ensure tee has flushed to disk
         await new Promise((r) => setTimeout(r, 10));
 
@@ -97,6 +146,12 @@ exit $__exit
         await unlink(stderrFile).catch(() =>
         {});
 
+        if (code === 127 && stderr.includes(unixCaptureRequirementsMessage))
+        {
+          reject(new Error(stderr.trim()));
+          return;
+        }
+
         resolve({ exitCode: code ?? 0, stdout, stderr });
       }
       catch (err)
@@ -105,7 +160,10 @@ exit $__exit
       }
     });
 
-    child.on('error', reject);
+    child.on('error', (error) =>
+    {
+      void rejectOnce(error);
+    });
   });
 }
 

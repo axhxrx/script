@@ -186,6 +186,11 @@ npm install @axhxrx/script
 deno add jsr:@axhxrx/script
 ```
 
+## Runtime Notes
+
+- Live command-output capture uses a `bash` + `tee` pipeline.
+- If `bash` or `tee` is not available on `PATH`, Unix capture/file logging will fail with an explicit error.
+
 ## history
 
 🎅 2026-01-11: release 1.0.0

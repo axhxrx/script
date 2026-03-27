@@ -52,7 +52,7 @@ export class StepBuilder
   }
 
   /**
-   Mark this step as interactive (uses spawnSync with stdio:inherit). Useful for commands that open browsers or need terminal interaction.
+   Mark this step as interactive. By default this gives the command direct terminal access. If file logging is enabled, stdin remains interactive while stdout/stderr are captured for the log.
    */
   interactive(value = true): this
   {
