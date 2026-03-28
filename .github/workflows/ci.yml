@@ -24,31 +24,13 @@ jobs:
       - name: Install dependencies for Deno
         run: deno install
 
-      # In CI this repo is checked out standalone, without the monorepo parent.
-      # Moving tsconfig.json aside keeps Deno from picking up TypeScript settings
-      # that only make sense in the parent-workspace context. Move it completely
-      # out of the repo so publish/check steps do not see a fake *.off file.
       - name: Lint (Deno)
-        run: |
-          backup_path=''
-          if [ -f tsconfig.json ]; then
-            backup_path="$(mktemp)"
-            mv tsconfig.json "$backup_path"
-            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
-          fi
-          deno lint
+        run: deno lint
 
       # Run the cheap Deno checks before the longer Bun tests so failures show up
       # earlier in the workflow.
       - name: Check (Deno)
-        run: |
-          backup_path=''
-          if [ -f tsconfig.json ]; then
-            backup_path="$(mktemp)"
-            mv tsconfig.json "$backup_path"
-            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
-          fi
-          deno check
+        run: deno check
 
       - name: Install dependencies
         run: bun install
@@ -68,14 +50,7 @@ jobs:
 
       # The --allow-dirty is needed because in CI the deno.lock file may be modified.
       - name: JSR check
-        run: |
-          backup_path=''
-          if [ -f tsconfig.json ]; then
-            backup_path="$(mktemp)"
-            mv tsconfig.json "$backup_path"
-            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
-          fi
-          deno publish --dry-run --allow-dirty
+        run: deno publish --dry-run --allow-dirty
 
   # Only run if we're on main and the test job succeeded:
   publish:
@@ -99,12 +74,6 @@ jobs:
 
       - name: "Publish package (if new version exists)"
         run: |
-          backup_path=''
-          if [ -f tsconfig.json ]; then
-            backup_path="$(mktemp)"
-            mv tsconfig.json "$backup_path"
-            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
-          fi
           set +e
           publish_output="$(npx jsr publish --allow-dirty 2>&1)"
           publish_status=$?
