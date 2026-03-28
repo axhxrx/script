@@ -346,6 +346,27 @@ export class OutputContext
   }
 
   /**
+   Write control-plane text to the log file only, without terminal output.
+
+   Respects `output: 'command'` the same way as write()/log(), so prompts and other framework messages stay out of command-only logs.
+   */
+  fileWrite(text: string): void
+  {
+    if (this.#filePath && this.#fileOptions?.output !== 'command')
+    {
+      this.#partialLine += text;
+
+      const lastNewline = this.#partialLine.lastIndexOf('\n');
+      if (lastNewline !== -1)
+      {
+        const completeLines = this.#partialLine.slice(0, lastNewline + 1);
+        this.#partialLine = this.#partialLine.slice(lastNewline + 1);
+        this.#queueWrite(completeLines);
+      }
+    }
+  }
+
+  /**
    Write stdout to file only (no terminal output).
 
    Used for writing captured output on Unix where terminal output already happened via stdio:inherit.

@@ -19,13 +19,17 @@ import * as readline from 'node:readline/promises';
 export async function promptYesNo(
   prompt: string,
   defaultYes = true,
+  mirrorOutput?: (text: string) => void,
 ): Promise<boolean>
 {
   const rl = readline.createInterface({ input, output });
   try
   {
     const suffix = defaultYes ? '[Y/n]' : '[y/N]';
-    const answer = await rl.question(`${prompt} ${suffix}: `);
+    const fullPrompt = `${prompt} ${suffix}: `;
+    mirrorOutput?.(fullPrompt);
+    const answer = await rl.question(fullPrompt);
+    mirrorOutput?.(`${answer}\n`);
 
     if (!answer.trim())
     {
