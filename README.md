@@ -5,8 +5,67 @@ This is a utility library for using TypeScript instead of shell scripts. It's no
 ## TL;DR
 
 ```ts
+import {
+  add,
+  banner,
+  execute,
+  runQuiet,
+  switchGhAuth,
+  validate,
+} from "@axhxrx/script";
 
+const tag = "v0.1.0";
+
+validate("On main branch", () => {
+  const branch = runQuiet("git branch --show-current").trim();
+  return branch === "main" || `Expected main, on '${branch}'`;
+});
+
+banner("Release Prep");
+
+add("deno install && deno check && deno lint").description(
+  "Deno: check types & lint",
+);
+
+add("bun install && bun test ").description("Bun: run test suite");
+
+add(`gh release create ${tag} --draft --generate-notes`)
+  .description(`Create draft GitHub release ${tag}`)
+  .confirm(`Create draft release ${tag}?`)
+  .or(switchGhAuth)
+  .and(`gh release create ${tag} --draft --generate-notes`);
+
+await execute({ parseArgs: true });
 ```
+
+Run that script:
+
+```text
+./bin./create-release.ts
+
+🔍 Running validations...
+
+  ○ On main branch... ✓
+
+
+📋 Execution Plan
+
+
+  ── Release Prep ──
+
+  1. Deno: check types & lint
+     └─ deno install && deno check && deno lint
+  2. Bun: run test suite
+     └─ bun install && bun test
+  3. Create draft GitHub release v0.1.0 (confirm: skippable, has fallback)
+     └─ gh release create v0.1.0 --draft --generate-notes
+
+Total: 3 steps
+
+Proceed with execution? [Y/n]:
+```
+
+...and the rest goes how you'd expect.
 
 ## Why shell scripts make you die
 
@@ -139,8 +198,8 @@ if (args.gcloudAuth) {
   add("gcloud auth login")
     .description("Authenticate with gcloud")
     .interactive()
-    .onError("warn");
-    .cwd('~')
+    .onError("warn")
+    .cwd("~")
     .confirm("⚠️ May cause computer explosion. Are you sure?", true)
     .canSkip(false)
     .validate(() => {
@@ -161,7 +220,7 @@ if (args.gcloudAuth) {
 
 ```ts
 // You can also schedule script-level validations any time before calling execute(). All validations run before any steps are executed. This is for pre-flight sanity-checking.
-validate(async () => {
+validate("No bombs detected", async () => {
   const somebody = await mainScreenTurnOn();
   return !somebody.seUpUsTheBomb; // we're good to go
 });
@@ -191,22 +250,22 @@ await execute({ parseArgs: true });
 
 ```bash
 # Bun
-bunx jsr add @axhxrx/op
+bunx jsr add @axhxrx/script
 
 # pnpm
-pnpm i jsr:@axhxrx/op
+pnpm i jsr:@axhxrx/script
 
 # npm
-npx jsr add @axhxrx/op
+npx jsr add @axhxrx/script
 
 # Deno
-deno add jsr:@axhxrx/op
+deno add jsr:@axhxrx/script
 ```
 
 With Deno, you can alternatively just import it from JSR _without_ adding it to your project (cool):
 
 ```ts
-import * as script from "jsr:@axhxrx/op";
+import * as script from "jsr:@axhxrx/script";
 ```
 
 ## Runtime Notes
@@ -217,6 +276,6 @@ import * as script from "jsr:@axhxrx/op";
 
 ## history
 
-🎅 2026-03-28: release 1.0.0
+🎅 2026-03-28: release 0.1.0
 
 🤖 2025-12-26: repo initialized by Bottie McBotface bot@axhxrx.com
