@@ -83,7 +83,9 @@ async function runCommandWithTee(
   await writeFile(stderrFile, '');
 
   // Use exec to redirect stdout/stderr to tee processes that write to files.
-  // The `wait` ensures tee processes complete before bash exits.
+  // On Ubuntu Bash, a bare `wait` after process substitution can deadlock because
+  // the shell still holds the tee pipes open. Save the original stdout/stderr,
+  // restore them after the command, then close the tee FDs before waiting.
   // Exit code is captured before wait (which returns 0).
   const wrappedCmd = `
 if ! command -v tee >/dev/null 2>&1; then
@@ -91,9 +93,12 @@ if ! command -v tee >/dev/null 2>&1; then
   printf '%s\\n' "${unixCaptureRequirementsMessage} Could not find tee for tee-based output capture." >> "${stderrFile}"
   exit 127
 fi
-exec > >(tee "${stdoutFile}") 2> >(tee "${stderrFile}" >&2)
+exec 3>&1 4>&2
+exec > >(tee "${stdoutFile}" >&3) 2> >(tee "${stderrFile}" >&4)
 ${command}
 __exit=$?
+exec >&3 2>&4
+exec 3>&- 4>&-
 wait
 exit $__exit
 `.trim();
