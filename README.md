@@ -35,7 +35,7 @@ add(`gh release create ${tag} --draft --generate-notes`)
   .or(switchGhAuth)
   .and(`gh release create ${tag} --draft --generate-notes`);
 
-await execute({ parseArgs: true });
+await execute();
 ```
 
 Run that script:
@@ -170,7 +170,7 @@ Total: 4 steps
 Proceed with execution? [Y/n]:
 ```
 
-Use `execute({ yes: true });` to skip the confirmation. Or use `execute({parseArgs: true})` to use the built-in support for parsing `--yes` or `-y` from the command line args. (That also gives you automatic support for `--dry-run`)
+Use `execute({ yes: true });` to skip the confirmation. By default, `execute()` parses `--yes`/`-y` and `--dry-run`/`--dryRun` from the command line args. Pass `execute({ parseArgs: false })` to opt out.
 
 OK, fine. But the above still isn't really any better than this `bash` script:
 
@@ -243,8 +243,81 @@ add(summarizeLocalChanges).description("Summarize local changes");
 
 add("git log --oneline -3").description("Show recent commits");
 
-await execute({ parseArgs: true });
+await execute();
 ```
+
+### .or() and .and() — fallback and continuation chains
+
+Shell scripts have `||` and `&&`. This library has `.or()` and `.and()`:
+
+```ts
+// If push fails (e.g. wrong auth), switch accounts and retry
+add('git push origin main')
+  .description('Push to remote')
+  .or('gh auth switch')        // runs only if push fails
+    .and('git push origin main')  // runs only if auth switch succeeded
+```
+
+Chains are a flat linked list -- each `.or()` or `.and()` attaches to the **previous** step and returns a builder for the new one. There's no precedence or nesting:
+
+```ts
+add('git push origin main')       // A
+  .or('gh auth switch')            // B: runs if A fails
+  .and('git push origin main')    // C: runs if B succeeded
+  .and('echo "All done"')         // D: runs if C succeeded
+```
+
+The execution walks the chain left to right: A → (fail?) → B → (ok?) → C → (ok?) → D.
+
+**Important:** this is _not_ the same as shell's `A || B && C`. In shell, `C` runs after either `A` or `B` succeeds. Here, each link only activates for the matching outcome of the step it's attached to. If `A` has an `.or()` link and `A` _succeeds_, the chain stops -- `C` never runs. The `.or()` path (and everything after it) is only reached when `A` fails.
+
+The execution plan shows chains with visual indicators:
+
+```text
+  1. Push to remote
+     └─ git push origin main
+     ↩️  .or()  gh auth switch
+     ↪️  .and() git push origin main
+     ↪️  .and() echo "All done"
+```
+
+### file logging
+
+Log command output to files, with optional timestamps and auto-redaction of secrets:
+
+```ts
+import { createScript } from '@axhxrx/script'
+
+const script = createScript()
+
+// Script-level: capture everything
+await script.file({ path: './build.log', timestamps: true })
+
+// Step-level: log just this step's output
+script.add('npm test')
+  .file({ path: './test.log', output: 'command', redact: 'auto' })
+
+await script.execute()
+```
+
+### additional utilities
+
+The library also exports helpers for common scripting tasks:
+
+| Function | Description |
+| -------- | ----------- |
+| `run(cmd)` | Execute a shell command, stream output to terminal |
+| `runQuiet(cmd)` | Execute silently, return output as string |
+| `parseScriptArgs()` | Parse `--dry-run` and `--yes`/`-y` from CLI args |
+| `autoRedact(text)` | Redact common secrets (API keys, tokens, passwords) |
+| `promptYesNo(question)` | Interactive yes/no prompt |
+| `promptForValue(question)` | Interactive text input prompt |
+| `getGhAuthUsername()` | Get current `gh` CLI authenticated user |
+| `switchGhAuth()` | Switch `gh` CLI auth account |
+| `getGitConfig(key)` | Read a git config value |
+| `setGitConfig(key, value)` | Write a git config value |
+| `getFileInfo(path)` | Get file name, content, SHA-256 hash, and size |
+| `assertCwd(expected)` | Safety check: ensure cwd matches before dangerous ops |
 
 ## Installation
 
