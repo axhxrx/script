@@ -342,6 +342,8 @@ import * as script from "jsr:@axhxrx/script";
 
 ## history
 
+📖 2026-03-28: release 0.1.2 — 🔧 Fix bug where --yes didn't propagate to nested step-level confirmations, so they'd still prompt
+
 📖 2026-03-28: release 0.1.1 — update README
 
 🎅 2026-03-28: release 0.1.0
