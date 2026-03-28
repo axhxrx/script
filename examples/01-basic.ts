@@ -15,7 +15,7 @@ add('echo "Hello from @axhxrx/script"');
 add('echo "Current directory: $(pwd)"');
 add('echo "Repository files:" && ls');
 
-const result = await execute({ parseArgs: true });
+const result = await execute();
 
 if (result.aborted)
 {

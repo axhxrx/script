@@ -53,7 +53,7 @@ script.add(async () =>
   console.log(`Removed ${workspace}`);
 }).description('Print log paths and clean up');
 
-const result = await script.execute({ parseArgs: true });
+const result = await script.execute();
 
 if (result.aborted)
 {

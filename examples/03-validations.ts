@@ -36,7 +36,7 @@ add('echo "All validations passed."')
 
 add('git status --short');
 
-const result = await execute({ parseArgs: true });
+const result = await execute();
 
 if (result.aborted)
 {

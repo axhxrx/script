@@ -46,7 +46,7 @@ add(() =>
 add('git diff --stat')
   .description('Review final diff');
 
-const result = await execute({ parseArgs: true });
+const result = await execute();
 
 if (result.aborted)
 {

@@ -18,6 +18,15 @@ import type { StepOptions } from './StepOptions.ts';
 import type { ChainLinkType, ChainStepResult, StepResult } from './StepResult.ts';
 import type { Validation } from './Validation.ts';
 
+const DEFAULT_EXECUTE_OPTIONS = {
+  parseArgs: true,
+  printResults: true,
+  captureOutput: true,
+} as const satisfies Pick<
+  Required<ExecuteOptions>,
+  'parseArgs' | 'printResults' | 'captureOutput'
+>;
+
 function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepResult
 {
   return {
@@ -61,7 +70,7 @@ function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepRe
    .canSkip(false);
 
  requireYes('Have you started the local environment?');
- await execute({ dryRun: process.argv.includes('--dry-run') });
+ await execute();
  ```
 
  @example
@@ -516,23 +525,24 @@ export class Script
    @param options - Execution options
    @returns Result object with execution status
    */
-  async execute(options: ExecuteOptions = {}): Promise<ExecuteResult>
+  async execute(options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS): Promise<ExecuteResult>
   {
     const ctx = this.#outputContext;
 
     // Merge parsed args with explicit options (explicit options always win)
+    const parseArgs = options.parseArgs ?? DEFAULT_EXECUTE_OPTIONS.parseArgs;
     let dryRun = options.dryRun;
     let yes = options.yes;
 
-    if (options.parseArgs)
+    if (parseArgs)
     {
       const parsed = parseScriptArgs();
       dryRun = options.dryRun ?? parsed.dryRun;
       yes = options.yes ?? parsed.yes;
     }
 
-    const printResults = options.printResults ?? true;
-    const captureOutput = options.captureOutput ?? true;
+    const printResults = options.printResults ?? DEFAULT_EXECUTE_OPTIONS.printResults;
+    const captureOutput = options.captureOutput ?? DEFAULT_EXECUTE_OPTIONS.captureOutput;
 
     // Reset step results for this execution
     this.#stepResults = [];

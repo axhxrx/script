@@ -89,6 +89,9 @@ export function validate(
 /**
  Execute all accumulated steps (using the global default Script).
 
+ By default, execute() parses `process.argv` for `--dry-run`, `--dryRun`, `-y`, and `--yes`.
+ Pass `{ parseArgs: false }` to opt out.
+
  @param options - Execution options
  @returns Result object with execution status
  */

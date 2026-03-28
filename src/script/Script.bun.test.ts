@@ -214,7 +214,7 @@ describe('Script.execute() with parseArgs', () =>
     process.argv = originalArgv;
   });
 
-  test('parseArgs: true reads --dry-run from process.argv', async () =>
+  test('parses --dry-run from process.argv by default', async () =>
   {
     const script = new Script();
     script.add('echo test');
@@ -222,14 +222,14 @@ describe('Script.execute() with parseArgs', () =>
     // Simulate: ./script.ts --dry-run
     process.argv = ['node', 'script.ts', '--dry-run'];
 
-    const result = await script.execute({ parseArgs: true });
+    const result = await script.execute();
 
     // Should be a dry run (no execution, plan printed)
     expect(result.executed).toBe(false);
     expect(result.stepsRun).toBe(0);
   });
 
-  test('parseArgs: true reads --dryRun from process.argv', async () =>
+  test('parses --dryRun from process.argv by default', async () =>
   {
     const script = new Script();
     script.add('echo test');
@@ -237,7 +237,7 @@ describe('Script.execute() with parseArgs', () =>
     // Simulate: ./script.ts --dryRun
     process.argv = ['node', 'script.ts', '--dryRun'];
 
-    const result = await script.execute({ parseArgs: true });
+    const result = await script.execute();
 
     // Should be a dry run
     expect(result.executed).toBe(false);
@@ -253,14 +253,14 @@ describe('Script.execute() with parseArgs', () =>
     process.argv = ['node', 'script.ts', '--dry-run'];
 
     // Explicit option should override
-    const result = await script.execute({ parseArgs: true, dryRun: false, yes: true });
+    const result = await script.execute({ dryRun: false, yes: true });
 
     // Should have executed (not a dry run because explicit option overrides)
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
   });
 
-  test('explicit dryRun: true works without parseArgs', async () =>
+  test('explicit dryRun: true still works', async () =>
   {
     const script = new Script();
     script.add('echo test');
@@ -274,7 +274,7 @@ describe('Script.execute() with parseArgs', () =>
     expect(result.stepsRun).toBe(0);
   });
 
-  test('parseArgs: false (default) ignores process.argv', async () =>
+  test('parseArgs: false ignores process.argv', async () =>
   {
     const script = new Script();
     script.add('echo test');
@@ -282,8 +282,7 @@ describe('Script.execute() with parseArgs', () =>
     // Simulate: ./script.ts --dry-run
     process.argv = ['node', 'script.ts', '--dry-run'];
 
-    // parseArgs not set, so argv should be ignored
-    const result = await script.execute({ yes: true }); // Need yes: true to skip prompt
+    const result = await script.execute({ parseArgs: false, yes: true });
 
     // Should have executed (argv ignored)
     expect(result.executed).toBe(true);
@@ -651,6 +650,84 @@ describe('.or() fallback API', () =>
     const result = await script.execute({ yes: true, printResults: false });
 
     expect(result.state).toBe('failed');
+  });
+});
+
+describe('.or() then .and() interaction', () =>
+{
+  test('A.or(B).and(C): when A succeeds, chain stops — C does NOT run', async () =>
+  {
+    const script = new Script();
+    let bRan = false;
+    let cRan = false;
+
+    script.add(() =>
+    {
+      // A succeeds
+    })
+      .or(() =>
+      {
+        bRan = true;
+      })
+      .and(() =>
+      {
+        cRan = true;
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(bRan).toBe(false);
+    expect(cRan).toBe(false);
+  });
+
+  test('A.or(B).and(C): when A fails and B succeeds, C runs', async () =>
+  {
+    const script = new Script();
+    const order: string[] = [];
+
+    script.add(() =>
+    {
+      order.push('A');
+      throw new Error('A fails');
+    })
+      .or(() =>
+      {
+        order.push('B');
+      })
+      .and(() =>
+      {
+        order.push('C');
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(order).toEqual(['A', 'B', 'C']);
+  });
+
+  test('A.or(B).and(C): when A fails and B also fails, C does NOT run', async () =>
+  {
+    const script = new Script();
+    let cRan = false;
+
+    script.add(() =>
+    {
+      throw new Error('A fails');
+    })
+      .or(() =>
+      {
+        throw new Error('B also fails');
+      })
+      .and(() =>
+      {
+        cRan = true;
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('failed');
+    expect(cRan).toBe(false);
   });
 });
 

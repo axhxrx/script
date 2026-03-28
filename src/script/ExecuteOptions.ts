@@ -21,20 +21,24 @@ export interface ExecuteOptions
   /**
    Automatically parse process.argv for common flags (--dryRun, --dry-run, -y, --yes) using parseScriptArgs().
 
-   When true, parsed flags are used as defaults, but explicit options you pass always take precedence. For example:
+   By default, parsed flags are used as defaults, but explicit options you pass always take precedence. For example:
 
    @example
    ```ts
    // User runs: ./deploy.ts --dry-run
-   await execute({ parseArgs: true });
+   await execute();
    // → dryRun is true (from CLI)
 
    // User runs: ./deploy.ts --dry-run
-   await execute({ parseArgs: true, dryRun: false });
+   await execute({ dryRun: false });
    // → dryRun is false (explicit option overrides CLI)
+
+   // User runs: ./deploy.ts --dry-run
+   await execute({ parseArgs: false, yes: true });
+   // → argv is ignored entirely
    ```
 
-   @default false
+   @default true
    */
   parseArgs?: boolean;
 

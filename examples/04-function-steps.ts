@@ -49,7 +49,7 @@ add(summarizeLocalChanges)
 add('git log --oneline -3')
   .description('Show recent commits');
 
-const result = await execute({ parseArgs: true });
+const result = await execute();
 
 if (result.aborted)
 {

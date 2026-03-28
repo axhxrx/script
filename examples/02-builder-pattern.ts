@@ -39,7 +39,7 @@ add(async () =>
   console.log(`Cleaned up ${workspace}`);
 }).description('Remove the temp workspace');
 
-const result = await execute({ parseArgs: true });
+const result = await execute();
 
 if (result.aborted)
 {

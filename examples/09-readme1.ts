@@ -23,4 +23,4 @@ add(`gh release create ${tag} --draft --generate-notes`)
   .or(switchGhAuth)
   .and(`gh release create ${tag} --draft --generate-notes`);
 
-await execute({ parseArgs: true });
+await execute();
