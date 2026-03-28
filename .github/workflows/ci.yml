@@ -21,6 +21,30 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install dependencies for Deno
+        run: deno install
+
+      # In CI this repo is checked out standalone, without the monorepo parent.
+      # Moving tsconfig.json aside keeps Deno from picking up TypeScript settings
+      # that only make sense in the parent-workspace context.
+      - name: Lint (Deno)
+        run: |
+          if [ -f tsconfig.json ]; then
+            mv tsconfig.json tsconfig.json.off
+            trap 'mv tsconfig.json.off tsconfig.json' EXIT
+          fi
+          deno lint
+
+      # Run the cheap Deno checks before the longer Bun tests so failures show up
+      # earlier in the workflow.
+      - name: Check (Deno)
+        run: |
+          if [ -f tsconfig.json ]; then
+            mv tsconfig.json tsconfig.json.off
+            trap 'mv tsconfig.json.off tsconfig.json' EXIT
+          fi
+          deno check
+
       - name: Install dependencies
         run: bun install
 
@@ -28,7 +52,7 @@ jobs:
       # Node, Deno, and Bun many times, which is great coverage but too heavy for
       # Bun's default 5s per-test timeout when mixed into the normal unit-test run
       # in a slow CI env like GHA.
-      - name: Test (Bun, fast suite) and check (Bun)
+      - name: Test (Bun, fast suite)
         run: bun test --path-ignore-patterns 'examples/runtime-matrix.bun.test.ts' --max-concurrency 1
 
       # Run the cross-runtime E2E example matrix separately with a longer timeout
@@ -37,13 +61,8 @@ jobs:
       - name: Test cross-runtime example matrix
         run: bun test examples/runtime-matrix.bun.test.ts --timeout 30000 --max-concurrency 1
 
-      - name: Install dependencies for Deno
-        run: deno install
-
-      - name: Check (Deno)
-        run: deno check
-
-      # The --allow-dirty is needed because in CI the deno.lock file may be modified
+      # The --allow-dirty is needed because in CI the deno.lock file may be modified.
+      # Unlike deno lint/check, the dry-run publish doesn't need the tsconfig workaround.
       - name: JSR check
         run: deno publish --dry-run --allow-dirty
 
