@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
 import { Script } from './Script.ts';
 import type { StepResult } from './StepResult.ts';
+
+const scriptModuleUrl = new URL('../mod.ts', import.meta.url).href;
 
 describe('Script.add() multi-line handling', () =>
 {
@@ -287,6 +290,30 @@ describe('Script.execute() with parseArgs', () =>
     // Should have executed (argv ignored)
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
+  });
+});
+
+describe('Bug regressions', () =>
+{
+  test('yes: true suppresses per-step confirmations in Deno subprocesses', () =>
+  {
+    const code = `
+import { createScript } from ${JSON.stringify(scriptModuleUrl)};
+const script = createScript();
+script.add('echo hello').confirm('Run this?', true);
+const result = await script.execute({ yes: true, printResults: false });
+console.log(JSON.stringify({ aborted: result.aborted, stepsRun: result.stepsRun }));
+`;
+
+    const result = spawnSync('deno', ['eval', code], {
+      encoding: 'utf-8',
+      timeout: 2000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('"stepsRun":1');
+    expect(result.stdout).not.toContain('Run this? [Y/n]:');
   });
 });
 

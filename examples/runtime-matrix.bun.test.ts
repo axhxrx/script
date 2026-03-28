@@ -35,8 +35,7 @@ const examples: ExampleCase[] = [
   {
     file: '02-builder-pattern.ts',
     args: ['--yes'],
-    input: 'y\n',
-    expectedText: 'Write a demo .gitignore?',
+    expectedText: 'Builder Pattern Example Demo',
   },
   {
     file: '03-validations.ts',

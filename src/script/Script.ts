@@ -543,6 +543,10 @@ export class Script
 
     const printResults = options.printResults ?? DEFAULT_EXECUTE_OPTIONS.printResults;
     const captureOutput = options.captureOutput ?? DEFAULT_EXECUTE_OPTIONS.captureOutput;
+    const autoYes = yes === true;
+    const mirrorPromptToFile = ctx.filePath
+      ? (text: string) => ctx.fileWrite(text)
+      : undefined;
 
     // Reset step results for this execution
     this.#stepResults = [];
@@ -587,10 +591,10 @@ export class Script
     }
 
     // Show plan and ask for confirmation unless --yes was passed
-    if (!yes)
+    if (!autoYes)
     {
       this.#printPlan();
-      const proceed = await ask('Proceed with execution?', true);
+      const proceed = await ask('Proceed with execution?', true, undefined, mirrorPromptToFile);
       if (!proceed)
       {
         ctx.log('\n❌ Aborted.\n');
@@ -658,7 +662,9 @@ export class Script
       {
         const question = step.options.confirmPrompt || `Run: ${stepDesc}?`;
         const defaultYes = step.options.confirmDefault ?? true;
-        const proceed = await ask(question, defaultYes);
+        const proceed = autoYes
+          ? true
+          : await ask(question, defaultYes, undefined, mirrorPromptToFile);
 
         if (!proceed)
         {

@@ -18,6 +18,7 @@ export async function ask(
   question: string,
   defaultYes = true,
   alreadyAnswered?: boolean,
+  mirrorOutput?: (text: string) => void,
 ): Promise<boolean>
 {
   if (typeof alreadyAnswered === 'boolean')
@@ -27,7 +28,7 @@ export async function ask(
     );
     return alreadyAnswered;
   }
-  return await promptYesNo(question, defaultYes);
+  return await promptYesNo(question, defaultYes, mirrorOutput);
 }
 
 if (import.meta.main)

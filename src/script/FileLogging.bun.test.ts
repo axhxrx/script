@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +9,8 @@ import { autoRedact } from './autoRedact.ts';
 import { normalizeFileOptions } from './FileOptions.ts';
 import { OutputContext } from './OutputContext.ts';
 import { Script } from './Script.ts';
+
+const scriptModuleUrl = new URL('../mod.ts', import.meta.url).href;
 
 /**
  Helper to create a unique temp file path.
@@ -75,6 +78,12 @@ describe('autoRedact patterns', () =>
   {
     expect(autoRedact('password=secret123')).toBe('[REDACTED_SECRET]');
     expect(autoRedact('PASSWORD: "my-pass"')).toBe('[REDACTED_SECRET]');
+  });
+
+  test('redacts env-style secret assignments like SECRET_KEY', () =>
+  {
+    expect(autoRedact('SECRET_KEY=hunter2')).toBe('[REDACTED_SECRET]');
+    expect(autoRedact('AWS_SECRET_ACCESS_KEY = hunter2')).toBe('[REDACTED_SECRET]');
   });
 
   test('redacts Bearer tokens', () =>
@@ -621,5 +630,54 @@ describe('Issue fixes', () =>
 
     const content = await readFile(path, 'utf-8');
     expect(content).toContain('Partial line without newline');
+  });
+
+  test('Issue 6: step-level auto redaction redacts env-style secrets', async () =>
+  {
+    const path = tempPath('step-redaction');
+    filesToCleanup.push(path);
+
+    const script = new Script();
+    await script.file({ path, mode: 'overwrite', output: 'full', timestamps: true });
+
+    script.add('echo "SECRET_KEY=hunter2" && echo "normal output"')
+      .description('Step with secret')
+      .file({ path, redact: 'auto' });
+
+    await script.execute({ yes: true, printResults: false });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const content = await readFile(path, 'utf-8');
+    expect(content).toContain('[REDACTED_SECRET]');
+    expect(content).toContain('normal output');
+    expect(content).not.toContain('hunter2');
+  });
+
+  test('Issue 7: prompt logs include the question and user answer', async () =>
+  {
+    const path = tempPath('prompt-log');
+    filesToCleanup.push(path);
+
+    const code = `
+import { createScript } from ${JSON.stringify(scriptModuleUrl)};
+const script = createScript();
+await script.file({ path: ${JSON.stringify(path)}, output: 'full' });
+script.add('echo hello');
+await script.execute({ printResults: false });
+await new Promise((resolve) => setTimeout(resolve, 50));
+`;
+
+    const result = spawnSync('deno', ['eval', code], {
+      encoding: 'utf-8',
+      input: 'y\n',
+      timeout: 4000,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+
+    const content = await readFile(path, 'utf-8');
+    expect(content).toContain('Proceed with execution? [Y/n]: y');
+    expect(content).toContain('hello');
   });
 });

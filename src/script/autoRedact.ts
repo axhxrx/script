@@ -4,6 +4,13 @@
  These patterns aim to catch common sensitive data like passwords, API keys, tokens, and private keys while minimizing false positives.
  */
 const AUTO_REDACT_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  // Environment-style secret assignments (SECRET_KEY, AWS_SECRET_ACCESS_KEY, CLIENT_SECRET, etc.)
+  {
+    pattern:
+      /\b(?:[A-Za-z0-9]+[_-])*(?:SECRET|PASSWORD|PASSWD|PWD|TOKEN|API[_-]?KEY|AUTH[_-]?KEY|PRIVATE[_-]?KEY|CLIENT[_-]?SECRET|ACCESS[_-]?TOKEN|REFRESH[_-]?TOKEN|CREDENTIALS?)(?:[_-][A-Za-z0-9]+)*\s*[=:]\s*["']?[^\s"']+["']?/gi,
+    replacement: '[REDACTED_SECRET]',
+  },
+
   // Password/secret/token/key assignments (key=value or key: value)
   {
     pattern: /(?:password|passwd|pwd|secret|token|api[_-]?key|auth[_-]?key|credentials?)\s*[=:]\s*["']?[^\s"']+["']?/gi,
