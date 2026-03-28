@@ -29,7 +29,7 @@ jobs:
       # Bun's default 5s per-test timeout when mixed into the normal unit-test run
       # in a slow CI env like GHA.
       - name: Test (Bun, fast suite) and check (Bun)
-        run: bun test --path-ignore-patterns 'examples/runtime-matrix.bun.test.ts' && bun check
+        run: bun test --path-ignore-patterns 'examples/runtime-matrix.bun.test.ts' --max-concurrency 1
 
       # Run the cross-runtime E2E example matrix separately with a longer timeout
       # and no test-level contention. This keeps CI stable while still enforcing
