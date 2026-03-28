@@ -5,29 +5,22 @@ This is a utility library for using TypeScript instead of shell scripts. It's no
 ## TL;DR
 
 ```ts
-import {
-  add,
-  banner,
-  execute,
-  runQuiet,
-  switchGhAuth,
-  validate,
-} from "@axhxrx/script";
+import { add, banner, execute, runQuiet, switchGhAuth, validate } from '@axhxrx/script';
 
-const tag = "v0.1.0";
+const tag = 'v0.1.0';
 
-validate("On main branch", () => {
-  const branch = runQuiet("git branch --show-current").trim();
-  return branch === "main" || `Expected main, on '${branch}'`;
+validate('On main branch', () => {
+  const branch = runQuiet('git branch --show-current').trim();
+  return branch === 'main' || `Expected main, on '${branch}'`;
 });
 
-banner("Release Prep");
+banner('Release Prep');
 
-add("deno install && deno check && deno lint").description(
-  "Deno: check types & lint",
-);
+add('deno install && deno check && deno lint')
+  .description('Deno: check types & lint');
 
-add("bun install && bun test ").description("Bun: run test suite");
+add('bun install && bun test ')
+  .description('Bun: run test suite');
 
 add(`gh release create ${tag} --draft --generate-notes`)
   .description(`Create draft GitHub release ${tag}`)
@@ -348,6 +341,8 @@ import * as script from "jsr:@axhxrx/script";
 - If `bash` or `tee` is not available on `PATH`, Unix capture/file logging will fail with an explicit error.
 
 ## history
+
+📖 2026-03-28: release 0.1.1 — update README
 
 🎅 2026-03-28: release 0.1.0
 
