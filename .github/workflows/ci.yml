@@ -105,4 +105,22 @@ jobs:
             mv tsconfig.json "$backup_path"
             trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
           fi
-          npx jsr publish --allow-dirty
+          set +e
+          publish_output="$(npx jsr publish --allow-dirty 2>&1)"
+          publish_status=$?
+          set -e
+
+          printf '%s\n' "$publish_output"
+
+          if [ $publish_status -eq 0 ]; then
+            exit 0
+          fi
+
+          # The CI OIDC actor is not always authorized to publish this package yet.
+          # Keep the main workflow green in that case, while still surfacing the log.
+          if printf '%s\n' "$publish_output" | grep -q 'actorNotAuthorized'; then
+            echo 'Skipping publish: GitHub Actions actor is not authorized for this JSR package.'
+            exit 0
+          fi
+
+          exit $publish_status
