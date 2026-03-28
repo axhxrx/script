@@ -26,12 +26,15 @@ jobs:
 
       # In CI this repo is checked out standalone, without the monorepo parent.
       # Moving tsconfig.json aside keeps Deno from picking up TypeScript settings
-      # that only make sense in the parent-workspace context.
+      # that only make sense in the parent-workspace context. Move it completely
+      # out of the repo so publish/check steps do not see a fake *.off file.
       - name: Lint (Deno)
         run: |
+          backup_path=''
           if [ -f tsconfig.json ]; then
-            mv tsconfig.json tsconfig.json.off
-            trap 'mv tsconfig.json.off tsconfig.json' EXIT
+            backup_path="$(mktemp)"
+            mv tsconfig.json "$backup_path"
+            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
           fi
           deno lint
 
@@ -39,9 +42,11 @@ jobs:
       # earlier in the workflow.
       - name: Check (Deno)
         run: |
+          backup_path=''
           if [ -f tsconfig.json ]; then
-            mv tsconfig.json tsconfig.json.off
-            trap 'mv tsconfig.json.off tsconfig.json' EXIT
+            backup_path="$(mktemp)"
+            mv tsconfig.json "$backup_path"
+            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
           fi
           deno check
 
@@ -62,9 +67,15 @@ jobs:
         run: bun test examples/runtime-matrix.bun.test.ts --timeout 30000 --max-concurrency 1
 
       # The --allow-dirty is needed because in CI the deno.lock file may be modified.
-      # Unlike deno lint/check, the dry-run publish doesn't need the tsconfig workaround.
       - name: JSR check
-        run: deno publish --dry-run --allow-dirty
+        run: |
+          backup_path=''
+          if [ -f tsconfig.json ]; then
+            backup_path="$(mktemp)"
+            mv tsconfig.json "$backup_path"
+            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
+          fi
+          deno publish --dry-run --allow-dirty
 
   # Only run if we're on main and the test job succeeded:
   publish:
@@ -87,4 +98,11 @@ jobs:
         run: deno install
 
       - name: "Publish package (if new version exists)"
-        run: npx jsr publish --allow-dirty
+        run: |
+          backup_path=''
+          if [ -f tsconfig.json ]; then
+            backup_path="$(mktemp)"
+            mv tsconfig.json "$backup_path"
+            trap 'if [ -n "$backup_path" ] && [ -f "$backup_path" ]; then mv "$backup_path" tsconfig.json; fi' EXIT
+          fi
+          npx jsr publish --allow-dirty
