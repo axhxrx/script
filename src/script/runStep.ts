@@ -358,6 +358,11 @@ export function getStepDescription(step: Step): string
   }
 
   const first = step.commands[0];
+  if (!first)
+  {
+    return '[empty step]';
+  }
+
   if (typeof first === 'string')
   {
     return step.commands.length === 1

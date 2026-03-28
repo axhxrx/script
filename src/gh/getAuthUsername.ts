@@ -26,20 +26,28 @@ export function getGhAuthUsername(): string | null
     const lines = status.split('\n');
     for (let i = 0; i < lines.length; i++)
     {
-      const accountMatch = lines[i].match(/account\s+(\S+)/);
+      const line = lines[i];
+      if (!line)
+      {
+        continue;
+      }
+
+      const accountMatch = line.match(/account\s+(\S+)/);
       if (accountMatch && i + 1 < lines.length)
       {
         // Check if next line says "Active account: true"
-        if (lines[i + 1].includes('Active account: true'))
+        const nextLine = lines[i + 1];
+        const username = accountMatch[1] ?? null;
+        if (nextLine?.includes('Active account: true') && username)
         {
-          return accountMatch[1];
+          return username;
         }
       }
     }
 
     // Fallback: Single-account format "Logged in to github.com as username"
     const singleMatch = status.match(/Logged in to \S+ as (\S+)/);
-    return singleMatch ? singleMatch[1] : null;
+    return singleMatch?.[1] ?? null;
   }
   catch (_error: unknown)
   {

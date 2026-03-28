@@ -327,6 +327,11 @@ export class Script
       }
 
       const step = this.#steps[i];
+      if (!step)
+      {
+        continue;
+      }
+
       const desc = getStepDescription(step);
       const flags: string[] = [];
 
@@ -599,6 +604,11 @@ export class Script
       }
 
       const step = this.#steps[i];
+      if (!step)
+      {
+        continue;
+      }
+
       const stepDesc = getStepDescription(step);
 
       // Run step-level validation if present
