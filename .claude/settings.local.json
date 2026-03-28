@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(deno check:*)",
+      "Bash(brew list:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "Bash(dprint fmt:*)",
+      "Bash(gh auth switch:*)",
+      "Bash(gh auth status:*)"
+    ]
+  }
+}

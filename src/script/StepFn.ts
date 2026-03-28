@@ -1,7 +1,12 @@
 /**
  A step function that can be executed instead of a shell command.
+
+ Returns:
+ - void: success
+ - boolean: true for success, false for failure
+ - number: exit code (0 for success, non-zero for failure)
  */
-export type StepFn = () => void | Promise<void>;
+export type StepFn = () => void | boolean | number | Promise<void | boolean | number>;
 
 if (import.meta.main)
 {

@@ -1,6 +1,12 @@
 # @axhxrx/script
 
-This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as Bun Shell, but it works on any TypeScript runtime (even Node.js).
+This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as [Bun Shell](https://bun.com/docs/runtime/shell) , but it works on modern TypeScript runtimes, including Node.js 24+.
+
+## TL;DR
+
+```ts
+
+```
 
 ## Why shell scripts make you die
 
@@ -14,7 +20,7 @@ Shell scripts are like baby pythons. 🐍 Cute when little, but they tend to liv
 
 ## So why not TypeScript?
 
-I **_know_**, right? 99.164% of shell scripts written since 2020 shouldn't have been. But old habits die hard. Also, runtime-agnostic TypeScript isn't exactly _pithy_ for scripts that mostly just execute commands.
+I **_know_**, right? 99.164% of shell scripts written since 2020 _shouldn't have been_. But old habits die hard. Also, out of the box, runtime-agnostic TypeScript isn't exactly _pithy_ for scripts that mostly just execute commands.
 
 I mean, which is better:
 
@@ -37,9 +43,9 @@ try {
 }
 ```
 
-You can easily write a couple functions to make that more pleasant, but for the "zero to executing a couple shell commands", TypeScript hasn't always given us ergonmic ways to do it out of the box.
+You can easily write a couple functions to make that more pleasant, but for the "zero to executing a couple shell commands", TypeScript hasn't always given us ergonmic ways to do it.
 
-[Bun Shell](https://bun.com/docs/runtime/shell) is actually pretty great, and if you are OK with Bun-only, it's probably a better alternative to this library is.
+[Bun Shell](https://bun.com/docs/runtime/shell) is actually pretty great, and if you are OK with Bun-only, it's probably a better alternative to shell scripts than this library is.
 
 ## But this library is just modern TypeScript
 
@@ -121,7 +127,7 @@ So, what's the point? Well, the benefits of this library start to make themselve
 ### if and else, pre-flight validation, and builder pattern
 
 ```ts
-// add() just adds steps to the plan, they won
+// add() just adds steps to the plan, they won't
 // run until you call execute(). So you can use
 // if/else to conditionally add steps, without
 // ending up with partially executed steps.
@@ -131,29 +137,30 @@ if (args.gcloudAuth) {
 
   // steps can be modified via builder-pattern methods:
   add("gcloud auth login")
-      // User-friendly description shows up when executing
     .description("Authenticate with gcloud")
-      // inherit stdin so the user can type in the auth code
     .interactive()
-      // user might cancel this step, it's ok, don't quit
     .onError("warn");
-       // set cwd for this step
     .cwd('~')
-      // optional per-step confirmation for dangerous steps
     .confirm("⚠️ May cause computer explosion. Are you sure?", true)
-      // should execution keep going even if confirm() answer is no?
-    .canSkip(true)
-      // Step-level validation executes right before the step is
-      // executed. This means it can depend on the results of
-      // previous steps. (Although that can mean partial execution.)
+    .canSkip(false)
     .validate(() => {
       return doSomething();
     });
 }
+```
 
-// You can also schedule script-level validations any time before
-// calling execute(). All validations run before any steps
-// are executed. This is for pre-flight sanity-checking.
+| Method           | Description                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `.description()` | Optional user-friendly description shows up when executing, in addition to the raw command                               |
+| `.interactive()` | Inherit stdin so the user can type in the auth code                                                                      |
+| `.onError()`     | User might cancel this step, it's ok, don't quit                                                                         |
+| `.cwd()`         | Set cwd for this step                                                                                                    |
+| `.confirm()`     | Optional per-step confirmation for dangerous steps                                                                       |
+| `.canSkip()`     | Should execution keep going even if confirm() answer is no?                                                              |
+| `.validate()`    | Step-level validation executes right before the step is executed (and thus can depend on the results of previous steps). |
+
+```ts
+// You can also schedule script-level validations any time before calling execute(). All validations run before any steps are executed. This is for pre-flight sanity-checking.
 validate(async () => {
   const somebody = await mainScreenTurnOn();
   return !somebody.seUpUsTheBomb; // we're good to go
@@ -163,24 +170,53 @@ validate(async () => {
 ### use TypeScript functions interchangeably with shell commands
 
 ```ts
+add(`echo "Working in $(pwd)..."`);
 
+// Inline function step:
+add(() => {
+  const branch =
+    runQuiet("git branch --show-current").trim() || "(detached HEAD)";
+  console.log(`Branch: ${branch}`);
+}).description("Show current branch");
+
+// Named function step:
+add(summarizeLocalChanges).description("Summarize local changes");
+
+add("git log --oneline -3").description("Show recent commits");
+
+await execute({ parseArgs: true });
 ```
 
 ## Installation
 
 ```bash
 # Bun
-bun add @axhxrx/script
+bunx jsr add @axhxrx/op
 
-# npm/pnpm/yarn
-npm install @axhxrx/script
+# pnpm
+pnpm i jsr:@axhxrx/op
+
+# npm
+npx jsr add @axhxrx/op
 
 # Deno
-deno add jsr:@axhxrx/script
+deno add jsr:@axhxrx/op
 ```
+
+With Deno, you can alternatively just import it from JSR _without_ adding it to your project (cool):
+
+```ts
+import * as script from "jsr:@axhxrx/op";
+```
+
+## Runtime Notes
+
+- Node.js support target is 24+.
+- Live command-output capture uses a `bash` + `tee` pipeline.
+- If `bash` or `tee` is not available on `PATH`, Unix capture/file logging will fail with an explicit error.
 
 ## history
 
-🎅 2026-01-11: release 1.0.0
+🎅 2026-03-28: release 1.0.0
 
 🤖 2025-12-26: repo initialized by Bottie McBotface bot@axhxrx.com

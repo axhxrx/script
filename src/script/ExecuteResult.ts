@@ -16,9 +16,14 @@ export interface ExecuteResult
   executed: boolean;
 
   /**
-   Number of steps that ran successfully.
+   Number of top-level planned steps that completed successfully.
    */
   stepsRun: number;
+
+  /**
+   Total number of concrete steps that actually executed, including chained `AND`/`OR` steps recorded in `chainResults`.
+   */
+  totalStepsRun: number;
 
   /**
    Number of steps that were skipped.
@@ -54,6 +59,6 @@ export interface ExecuteResult
 if (import.meta.main)
 {
   console.log('-> executing ./src/script/ExecuteResult.ts');
-  console.log('Exported types: ExecuteResult');
+  console.log('Exported types: ExecuteResult, ScriptState');
   console.log('<- executed ./src/script/ExecuteResult.ts');
 }

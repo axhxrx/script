@@ -4,8 +4,10 @@
   "workspaces": {
     "": {
       "name": "script",
-      "devDependencies": {
-        "@types/bun": "latest",
+      "dependencies": {
+        "@axhxrx/write-new-file": "npm:@jsr/axhxrx__write-new-file",
+        "@std/cli": "npm:@jsr/std__cli",
+        "@types/bun": "^1.3.5",
       },
       "peerDependencies": {
         "typescript": "^5",
@@ -13,6 +15,16 @@
     },
   },
   "packages": {
+    "@axhxrx/write-new-file": ["@jsr/axhxrx__write-new-file@0.1.0", "https://npm.jsr.io/~/11/@jsr/axhxrx__write-new-file/0.1.0.tgz", { "dependencies": { "@jsr/std__cli": "^1.0.9", "@jsr/std__path": "^1.0.8" } }, "sha512-s8LqNpb3HhBbJRsixF6OGn281ExA4PaWVphBrpzkWjCTqyK1TXYVJH1gaHKAZy+2b7SUZjlJXmoo00Kjzg07Wg=="],
+
+    "@jsr/std__cli": ["@jsr/std__cli@1.0.25", "https://npm.jsr.io/~/11/@jsr/std__cli/1.0.25.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.12" } }, "sha512-2t7VjuQJ/tgs8DvmBjqAd1Tcdr1Zf30tqp3QW37R4eZEm17NCKFg1SLquotV+sdnWqkALneR4WTdX3pwWhdf+w=="],
+
+    "@jsr/std__internal": ["@jsr/std__internal@1.0.12", "https://npm.jsr.io/~/11/@jsr/std__internal/1.0.12.tgz", {}, "sha512-6xReMW9p+paJgqoFRpOE2nogJFvzPfaLHLIlyADYjKMUcwDyjKZxryIbgcU+gxiTygn8yCjld1HoI0ET4/iZeA=="],
+
+    "@jsr/std__path": ["@jsr/std__path@1.1.4", "https://npm.jsr.io/~/11/@jsr/std__path/1.1.4.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.12" } }, "sha512-SK4u9H6NVTfolhPdlvdYXfNFefy1W04AEHWJydryYbk+xqzNiVmr5o7TLJLJFqwHXuwMRhwrn+mcYeUfS0YFaA=="],
+
+    "@std/cli": ["@jsr/std__cli@1.0.25", "https://npm.jsr.io/~/11/@jsr/std__cli/1.0.25.tgz", { "dependencies": { "@jsr/std__internal": "^1.0.12" } }, "sha512-2t7VjuQJ/tgs8DvmBjqAd1Tcdr1Zf30tqp3QW37R4eZEm17NCKFg1SLquotV+sdnWqkALneR4WTdX3pwWhdf+w=="],
+
     "@types/bun": ["@types/bun@1.3.5", "", { "dependencies": { "bun-types": "1.3.5" } }, "sha512-RnygCqNrd3srIPEWBd5LFeUYG7plCoH2Yw9WaZGyNmdTEei+gWaHqydbaIRkIkcbXwhBT94q78QljxN0Sk838w=="],
 
     "@types/node": ["@types/node@25.0.3", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-W609buLVRVmeW693xKfzHeIV6nJGGz98uCPfeXI1ELMLXVeKYZ9m15fAMSaUPBHYLGFsVRcMmSCksQOrZV9BYA=="],

@@ -1,57 +1,46 @@
 #!/usr/bin/env bun
 /**
-Example showing validation checks that run before script execution.
+ Example showing pre-flight validations before any steps run.
+ */
 
-Validations are preconditions that must pass before any steps run. This is useful for checking that required tools are installed, environment variables are set, etc.
-*/
-
-import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import process from 'node:process';
 
-import { add, execute, validate } from '@axhxrx/script';
+import { add, execute, runQuiet, validate } from '@axhxrx/script';
 
-// Validate that we're in a git repository
-validate('In a git repository', () =>
+validate('package.json exists', () =>
+{
+  return existsSync('package.json') || 'Run this from a project root.';
+});
+
+validate('src directory exists', () =>
+{
+  return existsSync('src') || 'This example expects a src/ directory.';
+});
+
+validate('Git is installed', () =>
 {
   try
   {
-    const result = spawnSync('git', ['rev-parse', '--git-dir'], {
-      stdio: 'pipe',
-    });
-    return result.status === 0 || 'Not in a git repository. Please run from a git repo.';
+    runQuiet('git --version');
+    return true;
   }
   catch
   {
-    return 'Git is not installed';
+    return 'Git is not installed.';
   }
 });
 
-// Validate that node is available
-validate('Node.js is installed', () =>
-{
-  try
-  {
-    const result = spawnSync('node', ['--version'], {
-      stdio: 'pipe',
-    });
-    return result.status === 0;
-  }
-  catch
-  {
-    return 'Node.js is not installed';
-  }
-});
+add('echo "All validations passed."')
+  .description('Confirm that all validations passed');
 
-// Now add the actual work
-add('echo "All validations passed!"');
 add('git status --short');
 
-const result = await execute();
+const result = await execute({ parseArgs: true });
 
 if (result.aborted)
 {
-  console.error('Script was aborted!');
   process.exit(1);
 }
 
-console.log(`Done! Ran ${result.stepsRun} steps.`);
+console.log(`Done! Ran ${result.stepsRun} top-level step(s).`);

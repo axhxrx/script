@@ -1,3 +1,5 @@
+import type { FileOptions } from './FileOptions.ts';
+
 /**
  `StepOptions` is the raw config for a step.
  */
@@ -14,7 +16,9 @@ export interface StepOptions
   cwd?: string;
 
   /**
-   Use spawnSync with stdio:inherit for commands that need terminal interaction (e.g., gcloud auth which opens a browser).
+   Use interactive terminal input for commands that need user interaction (for example gcloud auth flows that open a browser).
+
+   By default this gives the command direct terminal access. If file logging is enabled, stdin remains interactive while stdout/stderr are captured for the log.
    */
   interactive?: boolean;
 
@@ -75,6 +79,13 @@ export interface StepOptions
    ```
    */
   multiLine?: boolean;
+
+  /**
+   File logging options for this step's output.
+
+   When set, this step's output will be written to a file in addition to (or instead of) terminal output.
+   */
+  fileOptions?: FileOptions;
 }
 
 if (import.meta.main)

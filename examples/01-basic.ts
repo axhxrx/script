@@ -1,26 +1,25 @@
 #!/usr/bin/env bun
 /**
-Basic example showing simple command execution with the Script module.
+ Minimal example: add a few commands and run them.
 
-This demonstrates the simplest usage pattern - just adding shell commands and executing them.
-*/
+ Try:
+   bun examples/01-basic.ts --dry-run
+   bun examples/01-basic.ts --yes
+ */
 
 import process from 'node:process';
 
 import { add, execute } from '@axhxrx/script';
 
-// Add some simple commands
-add('echo "Hello from Script!"');
+add('echo "Hello from @axhxrx/script"');
 add('echo "Current directory: $(pwd)"');
-add('ls -la');
+add('echo "Repository files:" && ls');
 
-// Execute all steps
-const result = await execute();
+const result = await execute({ parseArgs: true });
 
 if (result.aborted)
 {
-  console.error('Script was aborted!');
   process.exit(1);
 }
 
-console.log(`Done! Ran ${result.stepsRun} steps.`);
+console.log(`Done! Ran ${result.stepsRun} top-level step(s).`);
