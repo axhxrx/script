@@ -1210,3 +1210,277 @@ describe('chainResults tracking', () =>
     expect(chain?.[1].status).toBe('error');
   });
 });
+
+describe('.skipIf() — conditional step skipping', () =>
+{
+  test('skipIf(true) skips the step', async () =>
+  {
+    const script = new Script();
+    let stepRan = false;
+
+    script.add(() =>
+    {
+      stepRan = true;
+    }).skipIf(true);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(stepRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+    expect(result.stepsRun).toBe(0);
+    expect(result.stepResults.length).toBe(1);
+    expect(result.stepResults[0].status).toBe('skipped');
+    expect(result.stepResults[0].skipReason).toBe('skipIf condition met');
+  });
+
+  test('skipIf(false) does not skip the step', async () =>
+  {
+    const script = new Script();
+    let stepRan = false;
+
+    script.add(() =>
+    {
+      stepRan = true;
+    }).skipIf(false);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(stepRan).toBe(true);
+    expect(result.stepsRun).toBe(1);
+    expect(result.stepsSkipped).toBe(0);
+  });
+
+  test('skipIf with function evaluated lazily at execution time', async () =>
+  {
+    const script = new Script();
+    let conditionChecked = false;
+    let stepRan = false;
+
+    script.add(() =>
+    {
+      stepRan = true;
+    }).skipIf(() =>
+    {
+      conditionChecked = true;
+      return true;
+    });
+
+    // Condition should not have been checked yet (lazy evaluation)
+    expect(conditionChecked).toBe(false);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(conditionChecked).toBe(true);
+    expect(stepRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf with async function', async () =>
+  {
+    const script = new Script();
+    let stepRan = false;
+
+    script.add(() =>
+    {
+      stepRan = true;
+    }).skipIf(async () =>
+    {
+      await Promise.resolve();
+      return true;
+    });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(stepRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf on root step skips entire chain including .or() and .and()', async () =>
+  {
+    const script = new Script();
+    let orRan = false;
+    let andRan = false;
+
+    script.add(() =>
+    {
+      throw new Error('root fails');
+    })
+      .skipIf(true)
+      .or(() =>
+      {
+        orRan = true;
+      })
+      .and(() =>
+      {
+        andRan = true;
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(orRan).toBe(false);
+    expect(andRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf on .or() sub-step skips entire chain', async () =>
+  {
+    const script = new Script();
+    let rootRan = false;
+    let orRan = false;
+    let andRan = false;
+
+    script.add(() =>
+    {
+      rootRan = true;
+      throw new Error('root fails');
+    })
+      .or(() =>
+      {
+        orRan = true;
+      })
+      .skipIf(true)
+      .and(() =>
+      {
+        andRan = true;
+      });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(rootRan).toBe(false);
+    expect(orRan).toBe(false);
+    expect(andRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf on .and() sub-step skips entire chain', async () =>
+  {
+    const script = new Script();
+    let rootRan = false;
+    let andRan = false;
+
+    script.add(() =>
+    {
+      rootRan = true;
+    })
+      .and(() =>
+      {
+        andRan = true;
+      })
+      .skipIf(true);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(rootRan).toBe(false);
+    expect(andRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf does not affect other steps in the script', async () =>
+  {
+    const script = new Script();
+    let step1Ran = false;
+    let step2Ran = false;
+    let step3Ran = false;
+
+    script.add(() =>
+    {
+      step1Ran = true;
+    });
+    script.add(() =>
+    {
+      step2Ran = true;
+    }).skipIf(true);
+    script.add(() =>
+    {
+      step3Ran = true;
+    });
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(step1Ran).toBe(true);
+    expect(step2Ran).toBe(false);
+    expect(step3Ran).toBe(true);
+    expect(result.stepsRun).toBe(2);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('skipIf function returning false allows execution', async () =>
+  {
+    const script = new Script();
+    let stepRan = false;
+
+    script.add(() =>
+    {
+      stepRan = true;
+    }).skipIf(() => false);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(stepRan).toBe(true);
+    expect(result.stepsRun).toBe(1);
+    expect(result.stepsSkipped).toBe(0);
+  });
+
+  test('skipIf works with shell command steps', async () =>
+  {
+    const script = new Script();
+
+    script.add('echo should-not-run').skipIf(true);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.stepsSkipped).toBe(1);
+    expect(result.stepResults[0].status).toBe('skipped');
+    expect(result.stepResults[0].stdout).toBeUndefined();
+  });
+
+  test('skipIf short-circuits before step-level validation', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.add('echo hello')
+      .validate(() =>
+      {
+        validationRan = true;
+        return true;
+      })
+      .skipIf(true);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    // skipIf is checked before validation, so validation should NOT have run
+    expect(validationRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+
+  test('multiple skipIf conditions — first truthy one triggers skip', async () =>
+  {
+    const script = new Script();
+    let rootRan = false;
+    let andRan = false;
+
+    script.add(() =>
+    {
+      rootRan = true;
+    })
+      .skipIf(false) // root: don't skip
+      .and(() =>
+      {
+        andRan = true;
+      })
+      .skipIf(true); // and: skip — this causes the whole chain to skip
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(rootRan).toBe(false);
+    expect(andRan).toBe(false);
+    expect(result.stepsSkipped).toBe(1);
+  });
+});

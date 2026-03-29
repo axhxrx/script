@@ -372,6 +372,25 @@ export class Script
         );
       }
 
+      // Check if any step in the chain has a skipIf condition
+      {
+        let hasSkipIf = false;
+        let current: Step | undefined = step;
+        while (current)
+        {
+          if (current.options.skipIfFn)
+          {
+            hasSkipIf = true;
+            break;
+          }
+          current = current.nextStepType !== 'none' ? current.nextStep : undefined;
+        }
+        if (hasSkipIf)
+        {
+          flags.push('conditional');
+        }
+      }
+
       const flagStr = flags.length > 0 ? ` (${flags.join(', ')})` : '';
       ctx.log(`  ${i + 1}. ${desc}${flagStr}`);
 
@@ -401,6 +420,35 @@ export class Script
     }
 
     ctx.log(`\nTotal: ${this.#steps.length} steps\n`);
+  }
+
+  /**
+   Walk an entire step chain and check if any step has a skipIfFn that returns true.
+   */
+  async #shouldSkipChain(step: Step): Promise<boolean>
+  {
+    let current: Step | undefined = step;
+    while (current)
+    {
+      if (current.options.skipIfFn)
+      {
+        const shouldSkip = await current.options.skipIfFn();
+        if (shouldSkip)
+        {
+          return true;
+        }
+      }
+
+      if (current.nextStepType !== 'none')
+      {
+        current = current.nextStep;
+      }
+      else
+      {
+        current = undefined;
+      }
+    }
+    return false;
   }
 
   /**
@@ -624,6 +672,34 @@ export class Script
       }
 
       const stepDesc = getStepDescription(step);
+
+      // Check skipIf conditions across the entire chain (before validation/confirmation)
+      const shouldSkip = await this.#shouldSkipChain(step);
+      if (shouldSkip)
+      {
+        ctx.log(`⏭️  Skipping: ${stepDesc} (skipIf condition met)\n`);
+        const now = new Date();
+        const skipResult: StepResult = {
+          index: i,
+          type: isFunctionStep(step)
+            ? 'function'
+            : step.options.interactive
+            ? 'interactive'
+            : 'command',
+          description: stepDesc,
+          commands: step.commands.filter(
+            (c): c is string => typeof c === 'string',
+          ),
+          status: 'skipped',
+          startedAt: now,
+          finishedAt: now,
+          durationMs: 0,
+          skipReason: 'skipIf condition met',
+        };
+        this.#stepResults.push(skipResult);
+        result.stepsSkipped++;
+        continue;
+      }
 
       // Run step-level validation if present
       if (step.options.validateFn)

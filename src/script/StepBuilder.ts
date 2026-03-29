@@ -140,6 +140,47 @@ export class StepBuilder
   }
 
   /**
+   Skip this entire step chain if the condition is true. The condition is evaluated lazily at execution time, not when `add()` is called.
+
+   When placed anywhere in a chain (root, `.and()`, or `.or()`), a truthy result causes the entire top-level step chain to be skipped — no sub-steps run at all.
+
+   Accepts either a boolean (for conditions known at script-definition time) or a function (for conditions that should be evaluated right before execution).
+
+   @param condition - A boolean, or a function returning boolean or Promise<boolean>
+   @returns this for chaining
+
+   @example
+   ```ts
+   // Skip based on a variable
+   add('deploy to prod')
+     .skipIf(process.env.CI !== 'true');
+
+   // Skip based on a lazy check
+   add('generate release notes')
+     .skipIf(() => runQuiet('git log -1 --format=%s').includes('[skip notes]'));
+
+   // Async condition
+   add('publish package')
+     .skipIf(async () => {
+       const published = await checkIfAlreadyPublished();
+       return published;
+     });
+   ```
+   */
+  skipIf(condition: boolean | (() => boolean | Promise<boolean>)): this
+  {
+    if (typeof condition === 'boolean')
+    {
+      this.#step.options.skipIfFn = () => condition;
+    }
+    else
+    {
+      this.#step.options.skipIfFn = condition;
+    }
+    return this;
+  }
+
+  /**
    Configure file logging for this step's output.
 
    @param options - File path, boolean, or full FileOptions object

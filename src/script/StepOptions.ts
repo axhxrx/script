@@ -81,6 +81,13 @@ export interface StepOptions
   multiLine?: boolean;
 
   /**
+   Condition function that, if it returns true, causes the entire step chain to be skipped at execution time. This is evaluated lazily — the function runs right before the step would execute, not when `add()` is called.
+
+   When any step in a chain (root, `.and()`, or `.or()`) has a `skipIfFn` that returns true, the entire top-level step chain is skipped.
+   */
+  skipIfFn?: () => boolean | Promise<boolean>;
+
+  /**
    File logging options for this step's output.
 
    When set, this step's output will be written to a file in addition to (or instead of) terminal output.
