@@ -1,5 +1,9 @@
 /* eslint-disable no-console */
 
+import { mkdir } from 'node:fs/promises';
+import { basename } from 'node:path';
+import process from 'node:process';
+
 import { ask } from './ask.ts';
 import type { ExecuteOptions } from './ExecuteOptions.ts';
 import type { ExecuteResult } from './ExecuteResult.ts';
@@ -84,6 +88,19 @@ function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepRe
  await script.execute({ yes: true });
  ```
  */
+/**
+ The environment variable that, when set to a directory path, causes all Script
+ instances to automatically log their full execution transcript to that directory.
+
+ The log file is named `<timestamp>-<scriptname>.log`, e.g.
+ `2026-04-02T12-30-00-000Z-install-smb.log`. The script name is derived from
+ `process.argv[1]`.
+
+ If `script.file()` has already been called explicitly, this env var is ignored
+ for that instance.
+ */
+export const SCRIPT_LOG_DIR_ENV = 'SCRIPT_LOG_DIR';
+
 export class Script
 {
   /**
@@ -155,6 +172,31 @@ export class Script
     }
 
     return filePath;
+  }
+
+  /**
+   If SCRIPT_LOG_DIR is set and file logging hasn't been explicitly configured,
+   auto-enable file logging to that directory.
+   */
+  async #autoFileFromEnv(): Promise<void>
+  {
+    if (this.#outputContext.filePath)
+       {
+      return; // already configured explicitly
+    }
+    const logDir = process.env[SCRIPT_LOG_DIR_ENV];
+    if (!logDir)
+    {
+      return;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const scriptArg = process.argv[1] ?? 'script';
+    const scriptName = basename(scriptArg).replace(/\.[^.]+$/, '');
+    const logPath = `${logDir}/${timestamp}-${scriptName}.log`;
+
+    await mkdir(logDir, { recursive: true });
+    await this.file({ path: logPath, output: 'full', timestamps: true });
   }
 
   /**
@@ -576,6 +618,9 @@ export class Script
   async execute(options: ExecuteOptions = DEFAULT_EXECUTE_OPTIONS): Promise<ExecuteResult>
   {
     const ctx = this.#outputContext;
+
+    // Auto-enable file logging from SCRIPT_LOG_DIR if not already configured
+    await this.#autoFileFromEnv();
 
     // Merge parsed args with explicit options (explicit options always win)
     const parseArgs = options.parseArgs ?? DEFAULT_EXECUTE_OPTIONS.parseArgs;
