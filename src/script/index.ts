@@ -9,7 +9,7 @@ export type { FileOptions } from './FileOptions.ts';
 export { OutputContext } from './OutputContext.ts';
 export { parseScriptArgs } from './parseScriptArgs.ts';
 export type { ParsedScriptArgs } from './parseScriptArgs.ts';
-export { Script, SCRIPT_LOG_DIR_ENV } from './Script.ts';
+export { Script, SCRIPT_AUTO_LOG_TO_ENV } from './Script.ts';
 export type { Step } from './Step.ts';
 export { StepBuilder } from './StepBuilder.ts';
 export type { StepFn } from './StepFn.ts';

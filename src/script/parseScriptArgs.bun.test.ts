@@ -69,4 +69,48 @@ describe('parseScriptArgs', () =>
     expect(result.yes).toBe(true);
     expect(result.otherArgs).toEqual([]);
   });
+
+  test('parses --auto-log-to with directory path', () =>
+  {
+    const result = parseScriptArgs(['--auto-log-to', '/tmp/logs']);
+    expect(result.autoLogTo).toBe('/tmp/logs');
+    expect(result.otherArgs).toEqual([]);
+  });
+
+  test('parses --autoLogTo (camelCase)', () =>
+  {
+    const result = parseScriptArgs(['--autoLogTo', './logs']);
+    expect(result.autoLogTo).toBe('./logs');
+  });
+
+  test('--auto-log-to combines with other flags', () =>
+  {
+    const result = parseScriptArgs(['--yes', '--auto-log-to', '/tmp/logs', '--dry-run', 'staging']);
+    expect(result.yes).toBe(true);
+    expect(result.dryRun).toBe(true);
+    expect(result.autoLogTo).toBe('/tmp/logs');
+    expect(result.otherArgs).toEqual(['staging']);
+  });
+
+  test('--auto-log-to throws when no value follows', () =>
+  {
+    expect(() => parseScriptArgs(['--auto-log-to'])).toThrow('requires a directory path argument');
+  });
+
+  test('--auto-log-to throws when next arg is a flag', () =>
+  {
+    expect(() => parseScriptArgs(['--auto-log-to', '--yes'])).toThrow('requires a directory path argument');
+  });
+
+  test('autoLogTo is undefined when not specified', () =>
+  {
+    const result = parseScriptArgs(['--yes', 'build']);
+    expect(result.autoLogTo).toBeUndefined();
+  });
+
+  test('last --auto-log-to wins when specified multiple times', () =>
+  {
+    const result = parseScriptArgs(['--auto-log-to', '/first', '--auto-log-to', '/second']);
+    expect(result.autoLogTo).toBe('/second');
+  });
 });

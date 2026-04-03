@@ -1,7 +1,9 @@
 /* eslint-disable no-console */
 
-import { mkdir } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { execSync } from 'node:child_process';
+import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { hostname, networkInterfaces, userInfo } from 'node:os';
+import { basename, join } from 'node:path';
 import process from 'node:process';
 
 import { ask } from './ask.ts';
@@ -96,10 +98,13 @@ function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepRe
  `2026-04-02T12-30-00-000Z-install-smb.log`. The script name is derived from
  `process.argv[1]`.
 
- If `script.file()` has already been called explicitly, this env var is ignored
- for that instance.
+ The same behavior can be triggered via the `--auto-log-to <dir>` CLI argument,
+ which takes precedence over this env var.
+
+ If `script.file()` has already been called explicitly, both are ignored for
+ that instance.
  */
-export const SCRIPT_LOG_DIR_ENV = 'SCRIPT_LOG_DIR';
+export const SCRIPT_AUTO_LOG_TO_ENV = 'SCRIPT_AUTO_LOG_TO';
 
 export class Script
 {
@@ -126,6 +131,7 @@ export class Script
   #banners = new Map<number, string>();
   #stepResults: StepResult[] = [];
   #outputContext: OutputContext = new OutputContext(true);
+  #fileExplicitlyCalled = false;
 
   /**
    Get the results of steps executed so far. Useful for step N to inspect results of step N-1.
@@ -162,32 +168,85 @@ export class Script
    */
   async file(options?: string | boolean | FileOptions): Promise<string | undefined>
   {
+    this.#fileExplicitlyCalled = true;
     const filePath = await this.#outputContext.setFile(normalizeFileOptions(options ?? true));
 
     // Print file path hint if we got a file
     if (filePath)
     {
       this.#outputContext.log(`📝 Logging to: ${filePath}`);
-      this.#outputContext.log(`   (To watch: tail -f ${filePath})\n`);
+      this.#outputContext.log(`   (To watch: tail -f ${filePath})`);
+      this.#logSystemInfo();
     }
 
     return filePath;
   }
 
   /**
-   If SCRIPT_LOG_DIR is set and file logging hasn't been explicitly configured,
-   auto-enable file logging to that directory.
+   Auto-enable file logging from the --auto-log-to CLI arg, SCRIPT_AUTO_LOG_TO
+   env var, or the programmatic autoLogTo option. CLI arg wins over env var.
+   Skipped if script.file() was already called explicitly.
    */
-  async #autoFileFromEnv(): Promise<void>
+  async #autoLog(autoLogTo?: string): Promise<void>
   {
-    if (this.#outputContext.filePath)
-       {
-      return; // already configured explicitly
+    if (this.#fileExplicitlyCalled)
+    {
+      return; // file() was already called explicitly (even if to disable)
     }
-    const logDir = process.env[SCRIPT_LOG_DIR_ENV];
+    const logDir = autoLogTo ?? process.env[SCRIPT_AUTO_LOG_TO_ENV];
     if (!logDir)
     {
       return;
+    }
+
+    // Validate: error if the path is an existing file (not a directory)
+    try
+    {
+      const stats = await stat(logDir);
+      if (stats.isFile())
+      {
+        throw new Error(
+          `--auto-log-to / SCRIPT_AUTO_LOG_TO path is an existing file, not a directory: ${logDir}`,
+        );
+      }
+    }
+    catch (error: unknown)
+    {
+      if (error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT')
+      {
+        // Path doesn't exist yet — that's fine, mkdir will create it
+      }
+      else
+      {
+        throw error;
+      }
+    }
+
+    // Create the directory and verify it's writable
+    try
+    {
+      await mkdir(logDir, { recursive: true });
+    }
+    catch (error: unknown)
+    {
+      throw new Error(
+        `--auto-log-to / SCRIPT_AUTO_LOG_TO: cannot create directory: ${logDir}`,
+        { cause: error },
+      );
+    }
+
+    const probe = join(logDir, `.script-write-probe-${Date.now()}`);
+    try
+    {
+      await writeFile(probe, '');
+      await unlink(probe);
+    }
+    catch (error: unknown)
+    {
+      throw new Error(
+        `--auto-log-to / SCRIPT_AUTO_LOG_TO: directory is not writable: ${logDir}`,
+        { cause: error },
+      );
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -195,8 +254,133 @@ export class Script
     const scriptName = basename(scriptArg).replace(/\.[^.]+$/, '');
     const logPath = `${logDir}/${timestamp}-${scriptName}.log`;
 
-    await mkdir(logDir, { recursive: true });
     await this.file({ path: logPath, output: 'full', timestamps: true });
+  }
+
+  /**
+   Log system information to the file log. Each piece is wrapped in its own
+   try/catch so a failure to collect one piece doesn't prevent the rest.
+   */
+  #logSystemInfo(): void
+  {
+    const ctx = this.#outputContext;
+    const lines: string[] = ['   System info:'];
+
+    try
+    {
+      lines.push(`     Invocation: ${process.argv.join(' ')}`);
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      lines.push(`     Working directory: ${process.cwd()}`);
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      let user: string | undefined;
+      try
+      {
+        user = userInfo().username;
+      }
+      catch (_: unknown)
+      {
+        user = process.env.USER ?? process.env.USERNAME;
+      }
+      if (user)
+      {
+        lines.push(`     User: ${user}`);
+      }
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      lines.push(`     Hostname: ${hostname()}`);
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      const ifaces = networkInterfaces();
+      const ips: string[] = [];
+      for (const entries of Object.values(ifaces))
+      {
+        if (!entries) continue;
+        for (const entry of entries)
+        {
+          if (!entry.internal && entry.family === 'IPv4')
+          {
+            ips.push(entry.address);
+          }
+        }
+      }
+      if (ips.length > 0)
+      {
+        lines.push(`     IP: ${ips.join(', ')}`);
+      }
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      lines.push(`     Platform: ${process.platform} ${process.arch}`);
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      const runtime = (process.versions as Record<string, string | undefined>).bun
+        ? `Bun ${(process.versions as Record<string, string>).bun} (Node compat ${process.version})`
+        : `Node ${process.version}`;
+      lines.push(`     Runtime: ${runtime}`);
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    try
+    {
+      if (process.platform !== 'win32')
+      {
+        const uname = execSync('uname -a', { encoding: 'utf-8', timeout: 3000 }).trim();
+        lines.push(`     Kernel: ${uname}`);
+      }
+    }
+    catch (_: unknown)
+    {
+      /* ignore */
+    }
+
+    if (lines.length > 1 && ctx.filePath)
+    {
+      for (const line of lines)
+      {
+        ctx.fileWrite(line + '\n');
+      }
+      ctx.fileWrite('\n');
+    }
   }
 
   /**
@@ -619,20 +803,22 @@ export class Script
   {
     const ctx = this.#outputContext;
 
-    // Auto-enable file logging from SCRIPT_LOG_DIR if not already configured
-    await this.#autoFileFromEnv();
-
-    // Merge parsed args with explicit options (explicit options always win)
+    // Parse CLI args first so --auto-log-to is available for auto-logging
     const parseArgs = options.parseArgs ?? DEFAULT_EXECUTE_OPTIONS.parseArgs;
     let dryRun = options.dryRun;
     let yes = options.yes;
+    let autoLogTo = options.autoLogTo;
 
     if (parseArgs)
     {
       const parsed = parseScriptArgs();
       dryRun = options.dryRun ?? parsed.dryRun;
       yes = options.yes ?? parsed.yes;
+      autoLogTo = options.autoLogTo ?? parsed.autoLogTo;
     }
+
+    // Auto-enable file logging from --auto-log-to or SCRIPT_AUTO_LOG_TO env var
+    await this.#autoLog(autoLogTo);
 
     const printResults = options.printResults ?? DEFAULT_EXECUTE_OPTIONS.printResults;
     const captureOutput = options.captureOutput ?? DEFAULT_EXECUTE_OPTIONS.captureOutput;

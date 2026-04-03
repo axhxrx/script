@@ -681,3 +681,112 @@ await new Promise((resolve) => setTimeout(resolve, 50));
     expect(content).toContain('hello');
   });
 });
+
+describe('Auto-log (--auto-log-to / SCRIPT_AUTO_LOG_TO)', () =>
+{
+  test('autoLogTo option creates a timestamped log in the specified directory', async () =>
+  {
+    const dir = join(tmpdir(), `script-auto-log-test-${randomUUID()}`);
+
+    const script = new Script();
+    script.add('echo "AUTO_LOG_TEST"');
+    await script.execute({ yes: true, printResults: false, autoLogTo: dir });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const { readdirSync } = await import('node:fs');
+    const files = readdirSync(dir);
+    expect(files.length).toBe(1);
+    expect(files[0]).toMatch(/\.log$/);
+
+    const content = await readFile(join(dir, files[0]!), 'utf-8');
+    expect(content).toContain('AUTO_LOG_TEST');
+    expect(content).toContain('Logging to:');
+
+    // Clean up
+    const { rmSync } = await import('node:fs');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test('autoLogTo is skipped when script.file() was already called', async () =>
+  {
+    const explicitPath = tempPath('explicit-file');
+    const dir = join(tmpdir(), `script-auto-log-skip-${randomUUID()}`);
+    filesToCleanup.push(explicitPath);
+
+    const script = new Script();
+    await script.file({ path: explicitPath, output: 'full' });
+    script.add('echo "EXPLICIT_FILE_TEST"');
+    await script.execute({ yes: true, printResults: false, autoLogTo: dir });
+    await new Promise((r) => setTimeout(r, 100));
+
+    // The explicit file should have the output
+    const content = await readFile(explicitPath, 'utf-8');
+    expect(content).toContain('EXPLICIT_FILE_TEST');
+
+    // The auto-log directory should not have been created
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  test('autoLogTo throws when path is an existing file', async () =>
+  {
+    const filePath = tempPath('existing-file');
+    filesToCleanup.push(filePath);
+
+    // Create a regular file at the path
+    const { writeFileSync } = await import('node:fs');
+    writeFileSync(filePath, 'I am a file');
+
+    const script = new Script();
+    script.add('echo "should not run"');
+
+    await expect(
+      script.execute({ yes: true, printResults: false, autoLogTo: filePath }),
+    ).rejects.toThrow('existing file, not a directory');
+  });
+
+  test('script.file(false) suppresses auto-logging', async () =>
+  {
+    const dir = join(tmpdir(), `script-auto-log-suppressed-${randomUUID()}`);
+
+    const script = new Script();
+    await script.file(false);
+    script.add('echo "NO_LOG"');
+    await script.execute({ yes: true, printResults: false, autoLogTo: dir });
+
+    // The auto-log directory should not have been created
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(dir)).toBe(false);
+  });
+
+  test('system info header appears in log file but not command-only files', async () =>
+  {
+    const fullPath = tempPath('sysinfo-full');
+    const cmdPath = tempPath('sysinfo-cmd');
+    filesToCleanup.push(fullPath, cmdPath);
+
+    // Full output mode — system info should be in the file
+    const script1 = new Script();
+    await script1.file({ path: fullPath, output: 'full' });
+    script1.add('echo "hello"');
+    await script1.execute({ yes: true, printResults: false });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const fullContent = await readFile(fullPath, 'utf-8');
+    expect(fullContent).toContain('System info:');
+    expect(fullContent).toContain('Working directory:');
+    expect(fullContent).toContain('Hostname:');
+    expect(fullContent).toContain('Platform:');
+    expect(fullContent).toContain('Runtime:');
+
+    // Command-only output mode — system info should NOT be in the file
+    const script2 = new Script();
+    await script2.file({ path: cmdPath, output: 'command' });
+    script2.add('echo "hello"');
+    await script2.execute({ yes: true, printResults: false });
+    await new Promise((r) => setTimeout(r, 100));
+
+    const cmdContent = await readFile(cmdPath, 'utf-8');
+    expect(cmdContent).not.toContain('System info:');
+  });
+});

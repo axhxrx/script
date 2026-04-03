@@ -163,7 +163,7 @@ Total: 4 steps
 Proceed with execution? [Y/n]:
 ```
 
-Use `execute({ yes: true });` to skip the confirmation. By default, `execute()` parses `--yes`/`-y` and `--dry-run`/`--dryRun` from the command line args. Pass `execute({ parseArgs: false })` to opt out.
+Use `execute({ yes: true });` to skip the confirmation. By default, `execute()` parses `--yes`/`-y`, `--dry-run`/`--dryRun`, and `--auto-log-to <dir>` from the command line args. Pass `execute({ parseArgs: false })` to opt out.
 
 OK, fine. But the above still isn't really any better than this `bash` script:
 
@@ -293,6 +293,22 @@ script.add('npm test')
 await script.execute()
 ```
 
+#### automatic file logging
+
+You can automatically log all script output to a timestamped file in a directory, via CLI arg or env var:
+
+```bash
+# Via CLI argument
+./deploy.ts --auto-log-to ./logs --yes
+
+# Via environment variable
+SCRIPT_AUTO_LOG_TO=./logs ./deploy.ts --yes
+```
+
+Both create a file like `./logs/2026-04-02T12-30-00-000Z-deploy.log` with full output and timestamps. The CLI arg takes precedence over the env var. If `script.file()` was called explicitly, both are ignored.
+
+The log file header includes system info (invocation command, username, hostname, IP, platform, runtime version, and kernel info) for audit and debugging.
+
 ### additional utilities
 
 The library also exports helpers for common scripting tasks:
@@ -301,7 +317,7 @@ The library also exports helpers for common scripting tasks:
 | -------- | ----------- |
 | `run(cmd)` | Execute a shell command, stream output to terminal |
 | `runQuiet(cmd)` | Execute silently, return output as string |
-| `parseScriptArgs()` | Parse `--dry-run` and `--yes`/`-y` from CLI args |
+| `parseScriptArgs()` | Parse `--dry-run`, `--yes`/`-y`, and `--auto-log-to` from CLI args |
 | `autoRedact(text)` | Redact common secrets (API keys, tokens, passwords) |
 | `promptYesNo(question)` | Interactive yes/no prompt |
 | `promptForValue(question)` | Interactive text input prompt |

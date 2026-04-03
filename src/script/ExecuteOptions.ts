@@ -19,7 +19,14 @@ export interface ExecuteOptions
   confirmEach?: boolean;
 
   /**
-   Automatically parse process.argv for common flags (--dryRun, --dry-run, -y, --yes) using parseScriptArgs().
+   Directory path for automatic file logging. Equivalent to `--auto-log-to <dir>` on the command line or the `SCRIPT_AUTO_LOG_TO` environment variable. When set, a timestamped log file is created in this directory with full output and timestamps enabled.
+
+   Explicit `script.file()` configuration takes precedence over this option.
+   */
+  autoLogTo?: string;
+
+  /**
+   Automatically parse process.argv for common flags (--dryRun, --dry-run, -y, --yes, --auto-log-to) using parseScriptArgs().
 
    By default, parsed flags are used as defaults, but explicit options you pass always take precedence. For example:
 

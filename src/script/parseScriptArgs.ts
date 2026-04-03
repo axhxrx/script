@@ -16,6 +16,11 @@ export interface ParsedScriptArgs
   yes: boolean;
 
   /**
+   Directory path from --auto-log-to or --autoLogTo, if specified.
+   */
+  autoLogTo?: string;
+
+  /**
    All other arguments that weren't recognized as flags.
    */
   otherArgs: string[];
@@ -27,6 +32,7 @@ export interface ParsedScriptArgs
  Recognizes:
  - `--dryRun` or `--dry-run` → `dryRun: true`
  - `-y` or `--yes` → `yes: true`
+ - `--auto-log-to <dir>` or `--autoLogTo <dir>` → `autoLogTo: '<dir>'`
 
  All other arguments are returned in `otherArgs`.
 
@@ -45,18 +51,21 @@ export interface ParsedScriptArgs
  @example
  ```ts
  // Parse custom array
- const args = parseScriptArgs(['--yes', 'build', 'deploy']);
- // { dryRun: false, yes: true, otherArgs: ['build', 'deploy'] }
+ const args = parseScriptArgs(['--yes', '--auto-log-to', './logs', 'deploy']);
+ // { dryRun: false, yes: true, autoLogTo: './logs', otherArgs: ['deploy'] }
  ```
  */
 export function parseScriptArgs(args: string[] = process.argv.slice(2)): ParsedScriptArgs
 {
   let dryRun = false;
   let yes = false;
+  let autoLogTo: string | undefined;
   const otherArgs: string[] = [];
 
-  for (const arg of args)
+  for (let i = 0; i < args.length; i++)
   {
+    const arg = args[i]!;
+
     if (arg === '--dryRun' || arg === '--dry-run')
     {
       dryRun = true;
@@ -65,13 +74,23 @@ export function parseScriptArgs(args: string[] = process.argv.slice(2)): ParsedS
     {
       yes = true;
     }
+    else if (arg === '--auto-log-to' || arg === '--autoLogTo')
+    {
+      const next = args[i + 1];
+      if (!next || next.startsWith('-'))
+      {
+        throw new Error(`${arg} requires a directory path argument`);
+      }
+      autoLogTo = next;
+      i++;
+    }
     else
     {
       otherArgs.push(arg);
     }
   }
 
-  return { dryRun, yes, otherArgs };
+  return { dryRun, yes, autoLogTo, otherArgs };
 }
 
 if (import.meta.main)
@@ -83,7 +102,7 @@ if (import.meta.main)
   console.log('Parsed args:', parsed);
 
   // Test with sample args
-  const sample = parseScriptArgs(['--dry-run', '-y', 'staging', 'deploy']);
+  const sample = parseScriptArgs(['--dry-run', '-y', '--auto-log-to', '/tmp/logs', 'staging', 'deploy']);
   console.log('Sample parse:', sample);
 
   console.log('<- executed ./src/script/parseScriptArgs.ts');
