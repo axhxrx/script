@@ -51,4 +51,30 @@ describe('runQuiet', () =>
     const output = runQuiet('pwd', '/tmp');
     expect(output).toContain('/tmp');
   });
+
+  test('should respect cwd in options object', () =>
+  {
+    const output = runQuiet('pwd', { cwd: '/tmp' });
+    expect(output).toContain('/tmp');
+  });
+
+  test('should throw on failure when throwOnFailure is true', () =>
+  {
+    expect(() =>
+    {
+      runQuiet('this-command-does-not-exist-xyz-12345', { throwOnFailure: true });
+    }).toThrow();
+  });
+
+  test('should still return output on success when throwOnFailure is true', () =>
+  {
+    const output = runQuiet('echo "works"', { throwOnFailure: true });
+    expect(output).toBe('works');
+  });
+
+  test('should swallow errors by default even with options object', () =>
+  {
+    const output = runQuiet('this-command-does-not-exist-xyz-12345', { cwd: '/tmp' });
+    expect(output).toBe('');
+  });
 });
