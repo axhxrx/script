@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 
-// Public API -- every export here is a semver commitment
+export { ask } from './ask.ts';
 export { autoRedact } from './autoRedact.ts';
 export { createScript } from './createScript.ts';
 export type { ExecuteOptions } from './ExecuteOptions.ts';
