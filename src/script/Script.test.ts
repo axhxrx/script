@@ -1,11 +1,63 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { access, mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
+import { afterEach, beforeEach, describe, expect, test } from '../test/testlib.ts';
 
 import { Script } from './Script.ts';
-import type { StepResult } from './StepResult.ts';
+import type { ChainStepResult, StepResult } from './StepResult.ts';
 
 const scriptModuleUrl = new URL('../mod.ts', import.meta.url).href;
+
+function getOnlyStepResult(result: { stepResults: readonly StepResult[] }): StepResult
+{
+  const [stepResult] = result.stepResults;
+  if (!stepResult)
+  {
+    throw new Error('Expected at least one step result');
+  }
+  return stepResult;
+}
+
+function getChainResults(stepResult: StepResult): ChainStepResult[]
+{
+  if (!stepResult.chainResults)
+  {
+    throw new Error('Expected chain results to be present');
+  }
+
+  return stepResult.chainResults;
+}
+
+function getChainResult(chainResults: readonly ChainStepResult[], index: number): ChainStepResult
+{
+  const chainResult = chainResults[index];
+  if (!chainResult)
+  {
+    throw new Error(`Expected chain result at index ${index}`);
+  }
+
+  return chainResult;
+}
+
+async function findBashPath(): Promise<string | undefined>
+{
+  for (const candidate of ['/bin/bash', '/usr/bin/bash'])
+  {
+    try
+    {
+      await access(candidate);
+      return candidate;
+    }
+    catch
+    {
+      // Keep scanning fallback locations.
+    }
+  }
+
+  return undefined;
+}
 
 describe('Script.add() multi-line handling', () =>
 {
@@ -140,7 +192,7 @@ describe('Script.add() with function steps', () =>
   test('function step creates one step', () =>
   {
     const script = new Script();
-    script.add(async () =>
+    script.add(() =>
     {
       // Do something
     });
@@ -325,13 +377,14 @@ describe('Script.execute() state and stepResults', () =>
     script.add('echo test');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
     expect(result.totalStepsRun).toBe(1);
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].status).toBe('success');
+    expect(stepResult.status).toBe('success');
   });
 
   test('stepResults contain captured output', async () =>
@@ -340,9 +393,10 @@ describe('Script.execute() state and stepResults', () =>
     script.add('echo hello');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].stdout).toBe('hello\n');
+    expect(stepResult.stdout).toBe('hello\n');
   });
 
   test('stepResults track timing', async () =>
@@ -351,10 +405,11 @@ describe('Script.execute() state and stepResults', () =>
     script.add('echo fast');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].durationMs).toBeGreaterThanOrEqual(0);
-    expect(result.stepResults[0].startedAt).toBeInstanceOf(Date);
-    expect(result.stepResults[0].finishedAt).toBeInstanceOf(Date);
+    expect(stepResult.durationMs).toBeGreaterThanOrEqual(0);
+    expect(stepResult.startedAt).toBeInstanceOf(Date);
+    expect(stepResult.finishedAt).toBeInstanceOf(Date);
   });
 
   test('failed execution has state: failed', async () =>
@@ -363,12 +418,13 @@ describe('Script.execute() state and stepResults', () =>
     script.add('exit 1'); // This should fail
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
     expect(result.aborted).toBe(true);
     expect(result.error).toBeDefined();
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].status).toBe('error');
+    expect(stepResult.status).toBe('error');
   });
 
   test('totalDurationMs is tracked', async () =>
@@ -388,9 +444,10 @@ describe('Script.execute() state and stepResults', () =>
     script.add('echo no-capture');
 
     const result = await script.execute({ yes: true, printResults: false, captureOutput: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].stdout).toBeUndefined();
+    expect(stepResult.stdout).toBeUndefined();
   });
 
   test('Unix capture path reports missing tee clearly', async () =>
@@ -400,19 +457,35 @@ describe('Script.execute() state and stepResults', () =>
       return;
     }
 
+    const bashPath = await findBashPath();
+    if (!bashPath)
+    {
+      return;
+    }
+
+    const pathDir = await mkdtemp(join(tmpdir(), 'script-bash-only-'));
+    await symlink(bashPath, join(pathDir, 'bash'));
+
     const script = new Script();
-    script.add('echo test').env({ PATH: '' });
+    script.add('echo test').env({ PATH: pathDir });
 
-    const result = await script.execute({
-      yes: true,
-      printResults: false,
-      captureOutput: true,
-    });
+    try
+    {
+      const result = await script.execute({
+        yes: true,
+        printResults: false,
+        captureOutput: true,
+      });
 
-    expect(result.state).toBe('failed');
-    expect(result.error).toBeDefined();
-    expect(result.error?.message).toContain('bash and tee');
-    expect(result.error?.message).toContain('Could not find tee');
+      expect(result.state).toBe('failed');
+      expect(result.error).toBeDefined();
+      expect(result.error?.message).toContain('bash and tee');
+      expect(result.error?.message).toContain('Could not find tee');
+    }
+    finally
+    {
+      await rm(pathDir, { recursive: true, force: true });
+    }
   });
 
   test('printResults: false suppresses summary', async () =>
@@ -432,7 +505,7 @@ describe('Script.execute() state and stepResults', () =>
     let capturedResults: readonly StepResult[] = [];
 
     script.add('echo first');
-    script.add(async () =>
+    script.add(() =>
     {
       // Capture step results during execution
       capturedResults = script.stepResults;
@@ -442,7 +515,12 @@ describe('Script.execute() state and stepResults', () =>
 
     // Should have captured the first step's result
     expect(capturedResults.length).toBe(1);
-    expect(capturedResults[0].description).toBe('echo first');
+    const [capturedResult] = capturedResults;
+    if (!capturedResult)
+    {
+      throw new Error('Expected a captured step result');
+    }
+    expect(capturedResult.description).toBe('echo first');
   });
 });
 
@@ -454,8 +532,9 @@ describe('Script.execute() UTF-8 and special character handling', () =>
     script.add('echo "Hello 🎉🚀🌍"');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].stdout).toBe('Hello 🎉🚀🌍\n');
+    expect(stepResult.stdout).toBe('Hello 🎉🚀🌍\n');
   });
 
   test('captures CJK characters', async () =>
@@ -464,8 +543,9 @@ describe('Script.execute() UTF-8 and special character handling', () =>
     script.add('echo "日本語テスト 中文测试 한국어"');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].stdout).toBe('日本語テスト 中文测试 한국어\n');
+    expect(stepResult.stdout).toBe('日本語テスト 中文测试 한국어\n');
   });
 
   test('captures mixed ASCII and UTF-8', async () =>
@@ -474,8 +554,9 @@ describe('Script.execute() UTF-8 and special character handling', () =>
     script.add('echo "ASCII + émojis: 🎯 + café"');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].stdout).toBe('ASCII + émojis: 🎯 + café\n');
+    expect(stepResult.stdout).toBe('ASCII + émojis: 🎯 + café\n');
   });
 
   test('captures stderr separately from stdout', async () =>
@@ -484,9 +565,10 @@ describe('Script.execute() UTF-8 and special character handling', () =>
     script.add('echo "stdout line" && echo "stderr line" >&2').onError('continue');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].stdout).toContain('stdout line');
-    expect(result.stepResults[0].stderr).toContain('stderr line');
+    expect(stepResult.stdout).toContain('stdout line');
+    expect(stepResult.stderr).toContain('stderr line');
   });
 
   test('handles large output without truncation', async () =>
@@ -496,8 +578,9 @@ describe('Script.execute() UTF-8 and special character handling', () =>
     script.add('for i in $(seq 1 1000); do echo "Line $i: some content here"; done');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    const lines = result.stepResults[0].stdout?.split('\n').filter(l => l) || [];
+    const lines = stepResult.stdout?.split('\n').filter(l => l) || [];
     expect(lines.length).toBe(1000);
     expect(lines[0]).toBe('Line 1: some content here');
     expect(lines[999]).toBe('Line 1000: some content here');
@@ -516,11 +599,12 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
     `);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].stdout).toContain('first');
-    expect(result.stepResults[0].stdout).toContain('second');
-    expect(result.stepResults[0].stdout).toContain('third');
+    expect(stepResult.stdout).toContain('first');
+    expect(stepResult.stdout).toContain('second');
+    expect(stepResult.stdout).toContain('third');
   });
 
   test('multi-command step fails on first error', async () =>
@@ -533,10 +617,11 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
     `);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
-    expect(result.stepResults[0].stdout).toContain('works');
-    expect(result.stepResults[0].stdout).not.toContain('never');
+    expect(stepResult.stdout).toContain('works');
+    expect(stepResult.stdout).not.toContain('never');
   });
 
   test('multi-command step with onError: warn continues on error', async () =>
@@ -549,11 +634,12 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
     `).onError('warn');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
-    expect(result.stepResults[0].stdout).toContain('first');
-    expect(result.stepResults[0].stdout).toContain('third');
-    expect(result.stepResults[0].status).toBe('warning');
+    expect(stepResult.stdout).toContain('first');
+    expect(stepResult.stdout).toContain('third');
+    expect(stepResult.status).toBe('warning');
   });
 
   test('stepResult includes commands array', async () =>
@@ -565,11 +651,12 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
     `);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
-    expect(result.stepResults[0].commands).toBeDefined();
-    expect(result.stepResults[0].commands?.length).toBe(2);
-    expect(result.stepResults[0].commands?.[0]).toBe('echo a');
-    expect(result.stepResults[0].commands?.[1]).toBe('echo b');
+    expect(stepResult.commands).toBeDefined();
+    expect(stepResult.commands?.length).toBe(2);
+    expect(stepResult.commands?.[0]).toBe('echo a');
+    expect(stepResult.commands?.[1]).toBe('echo b');
   });
 });
 
@@ -900,9 +987,10 @@ describe('StepFn return value handling', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
-    expect(result.stepResults[0].status).toBe('success');
+    expect(stepResult.status).toBe('success');
   });
 
   test('function returning true succeeds', async () =>
@@ -912,9 +1000,10 @@ describe('StepFn return value handling', () =>
     script.add(() => true);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
-    expect(result.stepResults[0].status).toBe('success');
+    expect(stepResult.status).toBe('success');
   });
 
   test('function returning false fails', async () =>
@@ -924,9 +1013,10 @@ describe('StepFn return value handling', () =>
     script.add(() => false);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
-    expect(result.stepResults[0].status).toBe('error');
+    expect(stepResult.status).toBe('error');
   });
 
   test('function returning 0 succeeds', async () =>
@@ -936,9 +1026,10 @@ describe('StepFn return value handling', () =>
     script.add(() => 0);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
-    expect(result.stepResults[0].status).toBe('success');
+    expect(stepResult.status).toBe('success');
   });
 
   test('function returning non-zero number fails', async () =>
@@ -948,10 +1039,11 @@ describe('StepFn return value handling', () =>
     script.add(() => 1);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
-    expect(result.stepResults[0].status).toBe('error');
-    expect(result.stepResults[0].exitCode).toBe(1);
+    expect(stepResult.status).toBe('error');
+    expect(stepResult.exitCode).toBe(1);
   });
 
   test('function returning negative number fails', async () =>
@@ -961,9 +1053,10 @@ describe('StepFn return value handling', () =>
     script.add(() => -1);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
-    expect(result.stepResults[0].exitCode).toBe(-1);
+    expect(stepResult.exitCode).toBe(-1);
   });
 
   test('async function returning false fails', async () =>
@@ -992,9 +1085,10 @@ describe('StepFn return value handling', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('failed');
-    expect(result.stepResults[0].exitCode).toBe(42);
+    expect(stepResult.exitCode).toBe(42);
   });
 
   test('function returning false triggers .or() fallback', async () =>
@@ -1009,9 +1103,11 @@ describe('StepFn return value handling', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(fallbackRan).toBe(true);
+    expect(stepResult.status).toBe('success');
   });
 
   test('function returning non-zero triggers .or() fallback', async () =>
@@ -1026,9 +1122,11 @@ describe('StepFn return value handling', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(fallbackRan).toBe(true);
+    expect(stepResult.status).toBe('success');
   });
 
   test('function returning false with onError: warn continues', async () =>
@@ -1043,10 +1141,11 @@ describe('StepFn return value handling', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(secondRan).toBe(true);
-    expect(result.stepResults[0].status).toBe('warning');
+    expect(stepResult.status).toBe('warning');
   });
 
   test('function returning non-zero with onError: continue silently continues', async () =>
@@ -1061,9 +1160,11 @@ describe('StepFn return value handling', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(secondRan).toBe(true);
+    expect(stepResult.status).toBe('success');
   });
 });
 
@@ -1075,11 +1176,12 @@ describe('chainResults tracking', () =>
     script.add('echo hello');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
-    expect(result.stepResults[0].chainResults).toBeDefined();
-    expect(result.stepResults[0].chainResults?.length).toBe(1);
-    expect(result.stepResults[0].chainResults?.[0].linkType).toBe('root');
-    expect(result.stepResults[0].chainResults?.[0].status).toBe('success');
+    expect(chain.length).toBe(1);
+    expect(getChainResult(chain, 0).linkType).toBe('root');
+    expect(getChainResult(chain, 0).status).toBe('success');
   });
 
   test('.and() chain records all steps with correct linkTypes', async () =>
@@ -1101,15 +1203,16 @@ describe('chainResults tracking', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
     expect(result.state).toBe('complete');
     expect(result.stepsRun).toBe(1);
     expect(result.totalStepsRun).toBe(3);
-    const chain = result.stepResults[0].chainResults;
-    expect(chain?.length).toBe(3);
-    expect(chain?.[0].linkType).toBe('root');
-    expect(chain?.[1].linkType).toBe('and');
-    expect(chain?.[2].linkType).toBe('and');
+    expect(chain.length).toBe(3);
+    expect(getChainResult(chain, 0).linkType).toBe('root');
+    expect(getChainResult(chain, 1).linkType).toBe('and');
+    expect(getChainResult(chain, 2).linkType).toBe('and');
   });
 
   test('.or() fallback records steps with correct linkTypes', async () =>
@@ -1126,14 +1229,15 @@ describe('chainResults tracking', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
     expect(result.state).toBe('complete');
-    const chain = result.stepResults[0].chainResults;
-    expect(chain?.length).toBe(2);
-    expect(chain?.[0].linkType).toBe('root');
-    expect(chain?.[0].status).toBe('error');
-    expect(chain?.[1].linkType).toBe('or');
-    expect(chain?.[1].status).toBe('success');
+    expect(chain.length).toBe(2);
+    expect(getChainResult(chain, 0).linkType).toBe('root');
+    expect(getChainResult(chain, 0).status).toBe('error');
+    expect(getChainResult(chain, 1).linkType).toBe('or');
+    expect(getChainResult(chain, 1).status).toBe('success');
   });
 
   test('mixed and/or chain records full execution path', async () =>
@@ -1158,18 +1262,19 @@ describe('chainResults tracking', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
     expect(result.state).toBe('complete');
-    const chain = result.stepResults[0].chainResults;
-    expect(chain?.length).toBe(4);
-    expect(chain?.[0].linkType).toBe('root');
-    expect(chain?.[0].status).toBe('success');
-    expect(chain?.[1].linkType).toBe('and');
-    expect(chain?.[1].status).toBe('error');
-    expect(chain?.[2].linkType).toBe('or');
-    expect(chain?.[2].status).toBe('success');
-    expect(chain?.[3].linkType).toBe('and');
-    expect(chain?.[3].status).toBe('success');
+    expect(chain.length).toBe(4);
+    expect(getChainResult(chain, 0).linkType).toBe('root');
+    expect(getChainResult(chain, 0).status).toBe('success');
+    expect(getChainResult(chain, 1).linkType).toBe('and');
+    expect(getChainResult(chain, 1).status).toBe('error');
+    expect(getChainResult(chain, 2).linkType).toBe('or');
+    expect(getChainResult(chain, 2).status).toBe('success');
+    expect(getChainResult(chain, 3).linkType).toBe('and');
+    expect(getChainResult(chain, 3).status).toBe('success');
   });
 
   test('chainResults contains stdout/stderr from each step', async () =>
@@ -1180,10 +1285,11 @@ describe('chainResults tracking', () =>
       .and('echo second');
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
-    const chain = result.stepResults[0].chainResults;
-    expect(chain?.[0].stdout).toBe('first\n');
-    expect(chain?.[1].stdout).toBe('second\n');
+    expect(getChainResult(chain, 0).stdout).toBe('first\n');
+    expect(getChainResult(chain, 1).stdout).toBe('second\n');
   });
 
   test('failed chain still has chainResults', async () =>
@@ -1200,14 +1306,15 @@ describe('chainResults tracking', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
+    const chain = getChainResults(stepResult);
 
     expect(result.state).toBe('failed');
     expect(result.stepsRun).toBe(0);
     expect(result.totalStepsRun).toBe(2);
-    const chain = result.stepResults[0].chainResults;
-    expect(chain?.length).toBe(2);
-    expect(chain?.[0].status).toBe('success');
-    expect(chain?.[1].status).toBe('error');
+    expect(chain.length).toBe(2);
+    expect(getChainResult(chain, 0).status).toBe('success');
+    expect(getChainResult(chain, 1).status).toBe('error');
   });
 });
 
@@ -1224,14 +1331,15 @@ describe('.skipIf() — conditional step skipping', () =>
     }).skipIf(true);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(stepRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
     expect(result.stepsRun).toBe(0);
     expect(result.stepResults.length).toBe(1);
-    expect(result.stepResults[0].status).toBe('skipped');
-    expect(result.stepResults[0].skipReason).toBe('skipIf condition met');
+    expect(stepResult.status).toBe('skipped');
+    expect(stepResult.skipReason).toBe('skipIf condition met');
   });
 
   test('skipIf(false) does not skip the step', async () =>
@@ -1271,10 +1379,12 @@ describe('.skipIf() — conditional step skipping', () =>
     expect(conditionChecked).toBe(false);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(conditionChecked).toBe(true);
     expect(stepRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('skipped');
   });
 
   test('skipIf with async function', async () =>
@@ -1292,9 +1402,11 @@ describe('.skipIf() — conditional step skipping', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(stepRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('skipped');
   });
 
   test('skipIf on root step skips entire chain including .or() and .and()', async () =>
@@ -1318,11 +1430,13 @@ describe('.skipIf() — conditional step skipping', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(orRan).toBe(false);
     expect(andRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('skipped');
   });
 
   test('skipIf on .or() sub-step skips entire chain', async () =>
@@ -1348,12 +1462,14 @@ describe('.skipIf() — conditional step skipping', () =>
       });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(rootRan).toBe(false);
     expect(orRan).toBe(false);
     expect(andRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('skipped');
   });
 
   test('skipIf on .and() sub-step skips entire chain', async () =>
@@ -1373,11 +1489,13 @@ describe('.skipIf() — conditional step skipping', () =>
       .skipIf(true);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(rootRan).toBe(false);
     expect(andRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('skipped');
   });
 
   test('skipIf does not affect other steps in the script', async () =>
@@ -1401,6 +1519,7 @@ describe('.skipIf() — conditional step skipping', () =>
     });
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.state).toBe('complete');
     expect(step1Ran).toBe(true);
@@ -1408,6 +1527,7 @@ describe('.skipIf() — conditional step skipping', () =>
     expect(step3Ran).toBe(true);
     expect(result.stepsRun).toBe(2);
     expect(result.stepsSkipped).toBe(1);
+    expect(stepResult.status).toBe('success');
   });
 
   test('skipIf function returning false allows execution', async () =>
@@ -1421,10 +1541,12 @@ describe('.skipIf() — conditional step skipping', () =>
     }).skipIf(() => false);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(stepRan).toBe(true);
     expect(result.stepsRun).toBe(1);
     expect(result.stepsSkipped).toBe(0);
+    expect(stepResult.status).toBe('success');
   });
 
   test('skipIf works with shell command steps', async () =>
@@ -1434,10 +1556,11 @@ describe('.skipIf() — conditional step skipping', () =>
     script.add('echo should-not-run').skipIf(true);
 
     const result = await script.execute({ yes: true, printResults: false });
+    const stepResult = getOnlyStepResult(result);
 
     expect(result.stepsSkipped).toBe(1);
-    expect(result.stepResults[0].status).toBe('skipped');
-    expect(result.stepResults[0].stdout).toBeUndefined();
+    expect(stepResult.status).toBe('skipped');
+    expect(stepResult.stdout).toBeUndefined();
   });
 
   test('skipIf short-circuits before step-level validation', async () =>

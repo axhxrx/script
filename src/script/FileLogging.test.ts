@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterEach, describe, expect, test } from '../test/testlib.ts';
 
 import { autoRedact } from './autoRedact.ts';
 import { normalizeFileOptions } from './FileOptions.ts';
@@ -405,7 +405,7 @@ describe('Function step console capture', () =>
     const script = new Script();
     await script.file({ path, mode: 'overwrite' });
 
-    script.add(async () =>
+    script.add(() =>
     {
       console.log('FUNCTION_LOG_CAPTURED');
     }).description('Function with console.log');
@@ -425,7 +425,7 @@ describe('Function step console capture', () =>
     const script = new Script();
     await script.file({ path, mode: 'overwrite' });
 
-    script.add(async () =>
+    script.add(() =>
     {
       console.warn('FUNCTION_WARN');
       console.error('FUNCTION_ERROR');
@@ -491,7 +491,7 @@ describe('Integration: real script execution with file logging', () =>
       .and('echo "Build complete!"');
 
     // Step 3: Cleanup function
-    script.add(async () =>
+    script.add(() =>
     {
       console.log('Cleanup: removing temp files');
     })
@@ -551,7 +551,7 @@ describe('Issue fixes', () =>
     const script = new Script();
     await script.file({ path, mode: 'overwrite' });
 
-    script.add(async () =>
+    script.add(() =>
     {
       console.log('Count: %d, Name: %s', 42, 'test');
       console.log({ nested: { value: 123 } });

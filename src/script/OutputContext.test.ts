@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rm, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterEach, describe, expect, test } from '../test/testlib.ts';
 
 import { defaultOutputContext, OutputContext } from './OutputContext.ts';
 

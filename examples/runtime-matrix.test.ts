@@ -1,8 +1,9 @@
-import { test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 type Runtime = {
   args: string[];
@@ -17,7 +18,7 @@ type ExampleCase = {
   input?: string;
 };
 
-const projectRoot = join(import.meta.dir, '..');
+const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const leakedArtifacts = ['notes.txt', 'release-notes.md'];
 
 const runtimes: Runtime[] = [
@@ -91,14 +92,15 @@ function runExample(runtime: Runtime, example: ExampleCase)
 {
   cleanupLeakedArtifacts();
 
-  const command = [
+  const [command, ...commandArgs] = [
     runtime.command,
     ...runtime.args,
     `examples/${example.file}`,
     ...example.args,
   ];
+  const commandText = [command, ...commandArgs].join(' ');
 
-  const result = spawnSync(command[0], command.slice(1), {
+  const result = spawnSync(command, commandArgs, {
     cwd: projectRoot,
     encoding: 'utf8',
     env: {
@@ -122,15 +124,15 @@ function runExample(runtime: Runtime, example: ExampleCase)
 
     if (result.status !== 0)
     {
-      throw new Error(`${label} exited with code ${result.status}\n\n$ ${command.join(' ')}\n\n${output}`);
+      throw new Error(`${label} exited with code ${result.status}\n\n$ ${commandText}\n\n${output}`);
     }
 
     if (!output.includes(example.expectedText))
     {
       throw new Error(
-        `${label} did not print expected text: ${JSON.stringify(example.expectedText)}\n\n$ ${
-          command.join(' ')
-        }\n\n${output}`,
+        `${label} did not print expected text: ${
+          JSON.stringify(example.expectedText)
+        }\n\n$ ${commandText}\n\n${output}`,
       );
     }
 

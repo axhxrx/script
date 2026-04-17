@@ -1,6 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { describe, test } from 'node:test';
 
 import { getPathToRepoRoot } from './getPathToRepoRoot.ts';
 

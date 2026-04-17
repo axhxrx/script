@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
+import { describe, test } from 'node:test';
 
 import { run } from './run.ts';
 import { runQuiet } from './runQuiet.ts';
