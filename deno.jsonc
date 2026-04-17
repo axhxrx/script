@@ -19,14 +19,12 @@
     "example.png",
     "tools",
     "tsconfig.json",
-    "node_modules",
-    "**/*.bun.test.ts",
-    "**/*.bun.ts"
+    "node_modules"
   ],
-  "check": {
+  "publish": {
     "exclude": [
-      "**/*.bun.ts",
-      "**/*.bun.test.ts"
+      "src/test",
+      "**/*.test.ts"
     ]
   },
   "imports": {

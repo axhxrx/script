@@ -1,0 +1,58 @@
+OpenAI Codex v0.118.0 (research preview)
+--------
+workdir: /Users/mason/Documents/CODE/axhxrx-megarepo/script/.claude/worktrees/agent-af2de0ad
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: read-only
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d9b11-70ab-7d11-ac82-414a15ae6cd8
+--------
+user
+commit HEAD
+  → Inspect HEAD commit diff and changed files
+  • Analyze changed code for correctness and regressions
+  • Summarize prioritized review findings in required JSON
+
+## Code Review: /Users/mason/Documents/CODE/axhxrx-megarepo/script/.claude/worktrees/agent-af2de0ad @ HEAD
+
+3 findings (1 P1, 2 P2)
+
+The test rename was not propagated to the GitHub Actions workflow, so CI will break immediately. The new package scripts/config also introduce avoidable regressions around Bun test execution and Deno package exclusion patterns.
+
+[P1] Update CI paths after renaming the runtime matrix test
+     /Users/mason/Documents/CODE/axhxrx-megarepo/script/.claude/worktrees/agent-af2de0ad/examples/runtime-matrix.test.ts:1-6
+     Renaming this file leaves `.github/workflows/ci.yml` pointing at `examples/runtime-matrix.bun.test.ts` in both Bun test steps. On the next GitHub Actions run, the dedicated matrix step will fail with “filter did not match any test files”, and the fast-suite ignore pattern will stop excluding this expensive test.
+
+[P2] Exclude the runtime matrix from the default Bun test script
+     /Users/mason/Documents/CODE/axhxrx-megarepo/script/.claude/worktrees/agent-af2de0ad/package.json:31-31
+     This new `test` script runs plain `bun test`, which now includes `examples/runtime-matrix.test.ts` under Bun’s default timeout/concurrency settings. The existing workflow already has to split that file out with `--timeout 30000` and `--max-concurrency 1`; without the same exclusion here, `bun run test` is likely to time out or become flaky on slower machines and CI runners.
+
+[P2] Keep Deno exclude globs aligned with the `*.test.ts` rename
+     /Users/mason/Documents/CODE/axhxrx-megarepo/script/.claude/worktrees/agent-af2de0ad/deno.jsonc:23-29
+     These globs still only exclude `*.bun.test.ts`, so after the rename the published Deno/JSR package will start including the entire test suite and test helpers. That is a behavior change from the previous package contents, and it pulls `node:test`/`@std/expect` files into the distributable unless the patterns are updated to match the new filenames.
+
+---
+
+## Fixes applied (round 2)
+
+[P1] CI workflow: updated `.github/workflows/ci.yml` to reference
+`examples/runtime-matrix.test.ts` in both the `--path-ignore-patterns`
+and the dedicated matrix step. CI will now find the renamed file.
+
+[P2] package.json test script: split the default `test` into
+`bun test --path-ignore-patterns 'examples/runtime-matrix.test.ts' --max-concurrency 1`
+for the fast suite, followed by a separate
+`bun test examples/runtime-matrix.test.ts --timeout 30000 --max-concurrency 1`
+for the heavy runtime matrix. This matches what CI already does.
+
+[P2] deno.jsonc: dropped the stale `*.bun.test.ts`/`*.bun.ts` exclude and
+`check.exclude` blocks, and added a `publish.exclude` that covers
+`src/test` plus `**/*.test.ts`. Verified with `deno publish --dry-run`
+that no `*.test.ts` files and no `src/test/` files ship to JSR.
+
+Self-verified in a fresh off-tree directory (outside the megarepo
+workspace): `bun run test`, `bun run check`, `deno test -A`,
+`deno check`, `deno lint`, `dprint check`, and `deno publish --dry-run`
+all pass.

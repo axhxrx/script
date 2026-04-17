@@ -28,6 +28,6 @@
   "scripts": {
     "check": "deno check && deno lint && bun tsc --noEmit && dprint check",
     "fix": "dprint fmt",
-    "test": "bun test && deno test --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys && node --test --test-isolation=none"
+    "test": "bun test --path-ignore-patterns 'examples/runtime-matrix.test.ts' --max-concurrency 1 && bun test examples/runtime-matrix.test.ts --timeout 30000 --max-concurrency 1 && deno test --allow-read --allow-write --allow-run --allow-env --allow-net --allow-sys && node --test --test-isolation=none"
   }
 }
