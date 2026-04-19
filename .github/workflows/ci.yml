@@ -1,7 +1,7 @@
 name: CI + Publish (if needed)
 on:
   push:
-    branches: ["*"]
+    branches: ["**"]
 
 jobs:
   test:
