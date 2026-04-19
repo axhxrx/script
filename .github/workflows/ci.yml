@@ -21,6 +21,11 @@ jobs:
         with:
           bun-version: latest
 
+      - uses: dprint/check@v2.3
+        with:
+          args: >-
+            --verbose
+
       - name: Install dependencies for Deno
         run: deno install
 
