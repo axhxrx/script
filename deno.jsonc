@@ -24,12 +24,10 @@
     "**/*.bun.ts"
   ],
   "check": {
-    "exclude": [
-      "**/*.bun.ts",
-      "**/*.bun.test.ts"
-    ]
   },
   "imports": {
-    "@axhxrx/write-new-file": "jsr:@axhxrx/write-new-file@^0.1.0"
+    "@axhxrx/write-new-file": "jsr:@axhxrx/write-new-file@^0.1.0",
+    "@std/assert": "jsr:@std/assert@^1.0.19",
+    "@std/expect": "jsr:@std/expect@^1.0.18"
   }
 }

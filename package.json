@@ -10,9 +10,12 @@
     "node": ">=24"
   },
   "dependencies": {
+    "@axhxrx/utf8-count": "npm:@jsr/axhxrx__utf8-count",
     "@axhxrx/write-new-file": "npm:@jsr/axhxrx__write-new-file@^0.1.0"
   },
   "devDependencies": {
+    "@std/assert": "npm:@jsr/std__assert",
+    "@std/expect": "npm:@jsr/std__expect",
     "@types/bun": "^1.3.11"
   },
   "peerDependencies": {
@@ -22,5 +25,8 @@
     "src",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "scripts": {
+    "check": "dprint check && deno check && deno lint && bun tsc --noEmit"
+  }
 }

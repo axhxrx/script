@@ -1,4 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
+import process from 'node:process';
+import { describe, test } from 'node:test';
 
 import { assertCwd } from './index.ts';
 
