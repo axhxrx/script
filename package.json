@@ -29,6 +29,9 @@
   ],
   "scripts": {
     "check": "dprint check && deno check && deno lint && bun tsc --noEmit",
-    "test:node": "node --test --test-isolation=none $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')"
+    "test:bun": "bun test",
+    "test:node": "node --test --test-isolation=none $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')",
+    "test:deno": "deno test -A $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')",
+    "test": "bun run test:bun && bun run test:node && bun run test:deno"
   }
 }
