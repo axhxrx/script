@@ -7,7 +7,7 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.2.0"
   },
   "dependencies": {
     "@axhxrx/utf8-count": "npm:@jsr/axhxrx__utf8-count",

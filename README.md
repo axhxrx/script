@@ -101,7 +101,7 @@ You can easily write a couple functions to make that more pleasant, but for the 
 
 ## But this library is just modern TypeScript
 
-Not as cute and concise as Bun Shell, but it works on every modern TypeScript runtime — Bun, Deno, and even less-modern runtimes like Node.js 24+.
+Not as cute and concise as Bun Shell, but it works on every modern TypeScript runtime — Bun, Deno, and even less-modern runtimes like Node.js 24.2+.
 
 The point is to just make it more ergonomic to write your build scripts and deploy scripts and whatever scripts in TypeScript, and never write another shell script again.
 
