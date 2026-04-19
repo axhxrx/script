@@ -355,7 +355,7 @@ import * as script from "jsr:@axhxrx/script";
 - Supported runtimes: **Bun**, **Deno**, and **Node.js 24.2+**.
 - Live command-output capture uses a `bash` + `tee` pipeline.
 - If `bash` or `tee` is not available on `PATH`, Unix capture/file logging will fail with an explicit error.
-- The test suite runs on all three runtimes. Use `bun run test:bun`, `bun run test:node`, `bun run test:deno`, or `bun run test` to run all three in sequence. NOTE: The tests currently require a hack shim to fix deno’s incomplete implementation of the Node test API (./src/_testkit.ts)
+- The test suite runs on all three runtimes. Use `bun run test:bun`, `bun run test:node`, `bun run test:deno`, or `bun run test` to run all three in sequence. The tests use [@axhxrx/test](https://jsr.io/@axhxrx/test) to work around a gap in Deno's implementation of the Node test API.
 
 ## history
 

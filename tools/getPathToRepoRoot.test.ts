@@ -2,7 +2,7 @@ import { expect } from '@std/expect';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { describe, test } from '../src/_testkit.ts';
+import { describe, test } from '@axhxrx/test';
 import { getPathToRepoRoot } from './getPathToRepoRoot.ts';
 
 describe('getPathToRepoRoot', () =>

@@ -5,7 +5,7 @@ import { readFile, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, test } from '../_testkit.ts';
+import { afterEach, describe, test } from '@axhxrx/test';
 import { autoRedact } from './autoRedact.ts';
 import { normalizeFileOptions } from './FileOptions.ts';
 import { OutputContext } from './OutputContext.ts';

@@ -14,6 +14,7 @@
     "@axhxrx/write-new-file": "npm:@jsr/axhxrx__write-new-file@^0.1.0"
   },
   "devDependencies": {
+    "@axhxrx/test": "npm:@jsr/axhxrx__test@^0.1.1",
     "@std/assert": "npm:@jsr/std__assert",
     "@std/expect": "npm:@jsr/std__expect",
     "@std/testing": "npm:@jsr/std__testing",

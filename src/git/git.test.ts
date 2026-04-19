@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, test } from '../_testkit.ts';
+import { describe, test } from '@axhxrx/test';
 import { run } from '../sh/index.ts';
 
 import { getGitConfig, setGitConfig } from './index.ts';

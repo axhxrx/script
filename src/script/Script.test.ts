@@ -3,7 +3,7 @@ import { expect } from '@std/expect';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
-import { afterEach, beforeEach, describe, test } from '../_testkit.ts';
+import { afterEach, beforeEach, describe, test } from '@axhxrx/test';
 import { Script } from './Script.ts';
 import type { StepResult } from './StepResult.ts';
 
