@@ -16,6 +16,7 @@
   "devDependencies": {
     "@std/assert": "npm:@jsr/std__assert",
     "@std/expect": "npm:@jsr/std__expect",
+    "@std/testing": "npm:@jsr/std__testing",
     "@types/bun": "^1.3.11"
   },
   "peerDependencies": {
