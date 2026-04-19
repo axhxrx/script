@@ -28,6 +28,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "check": "dprint check && deno check && deno lint && bun tsc --noEmit"
+    "check": "dprint check && deno check && deno lint && bun tsc --noEmit",
+    "test:node": "node --test --test-isolation=none $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')"
   }
 }
