@@ -1,9 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { run } from '../sh';
+import { describe, test } from '../_testkit.ts';
+import { run } from '../sh/index.ts';
 
 import { getGitConfig, setGitConfig } from './index.ts';
 

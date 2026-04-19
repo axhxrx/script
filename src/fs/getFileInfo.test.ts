@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
 import { join } from 'node:path';
 
 import { getPathToRepoRoot } from '../../tools/getPathToRepoRoot.ts';
+import { describe, test } from '../_testkit.ts';
 import { getFileInfo } from './getFileInfo.ts';
 
 describe('getFileInfo', () =>
