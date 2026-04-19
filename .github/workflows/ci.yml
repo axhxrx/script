@@ -45,13 +45,13 @@ jobs:
       # Bun's default 5s per-test timeout when mixed into the normal unit-test run
       # in a slow CI env like GHA.
       - name: Test (Bun, fast suite)
-        run: bun test --path-ignore-patterns 'examples/runtime-matrix.bun.test.ts' --max-concurrency 1
+        run: bun test --path-ignore-patterns 'examples/runtime-matrix.bun.test.ts'
 
       # Run the cross-runtime E2E example matrix separately with a longer timeout
       # and no test-level contention. This keeps CI stable while still enforcing
       # the Node 24+ / Deno / Bun compatibility promise.
       - name: Test cross-runtime example matrix
-        run: bun test examples/runtime-matrix.bun.test.ts --timeout 30000 --max-concurrency 1
+        run: bun test examples/runtime-matrix.bun.test.ts --timeout 30000
 
       # The --allow-dirty is needed because in CI the deno.lock file may be modified.
       - name: JSR check
