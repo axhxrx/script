@@ -23,7 +23,16 @@ async function main(): Promise<number>
     return 1;
   }
 
-  return await retryCommand(parsed.command, parsed.options);
+  try
+  {
+    return await retryCommand(parsed.command, parsed.options);
+  }
+  catch (error: unknown)
+  {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[retry-command] ${message}`);
+    return 1;
+  }
 }
 
 if (import.meta.main)

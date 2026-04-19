@@ -1,10 +1,8 @@
+import { DEFAULT_DELAY_MS, DEFAULT_MAX_RETRIES } from './constants.ts';
 import { runCommand } from './runCommand.ts';
 import { shouldRetry } from './shouldRetry.ts';
 import type { CommandResult } from './types/CommandResult.ts';
 import type { RetryCommandOptions } from './types/RetryCommandOptions.ts';
-
-const DEFAULT_MAX_RETRIES = 1;
-const DEFAULT_DELAY_MS = 1000;
 
 function sleep(ms: number): Promise<void>
 {
@@ -40,6 +38,18 @@ export async function retryCommand(command: string, options: RetryCommandOptions
   if (!command || command.trim().length === 0)
   {
     console.error('[retry-command] Error: command must be a non-empty string.');
+    return 1;
+  }
+
+  if (options.maxRetries !== undefined && (!Number.isInteger(options.maxRetries) || options.maxRetries < 0))
+  {
+    console.error('[retry-command] Error: maxRetries must be a non-negative integer.');
+    return 1;
+  }
+
+  if (options.delayMs !== undefined && (!Number.isInteger(options.delayMs) || options.delayMs < 0))
+  {
+    console.error('[retry-command] Error: delayMs must be a non-negative integer.');
     return 1;
   }
 

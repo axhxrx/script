@@ -1,9 +1,8 @@
 import { parseArgs } from 'node:util';
 
+import { DEFAULT_DELAY_MS, DEFAULT_MAX_RETRIES } from './constants.ts';
 import type { RetryCommandOptions } from './types/RetryCommandOptions.ts';
 
-const DEFAULT_MAX_RETRIES = 1;
-const DEFAULT_DELAY_MS = 1000;
 const NON_NEGATIVE_INTEGER = /^\d+$/;
 
 export interface ParseCliResult

@@ -211,6 +211,36 @@ describe('retryCommand', () =>
     expect(code).toBe(1);
   });
 
+  test('rejects negative maxRetries', async () =>
+  {
+    const code = await retryCommand('true', { maxRetries: -1 });
+    expect(code).toBe(1);
+  });
+
+  test('rejects non-integer maxRetries', async () =>
+  {
+    const code = await retryCommand('true', { maxRetries: 1.5 });
+    expect(code).toBe(1);
+  });
+
+  test('rejects NaN maxRetries', async () =>
+  {
+    const code = await retryCommand('true', { maxRetries: Number.NaN });
+    expect(code).toBe(1);
+  });
+
+  test('rejects negative delayMs', async () =>
+  {
+    const code = await retryCommand('true', { delayMs: -1 });
+    expect(code).toBe(1);
+  });
+
+  test('rejects non-integer delayMs', async () =>
+  {
+    const code = await retryCommand('true', { delayMs: 1.5 });
+    expect(code).toBe(1);
+  });
+
   test('shell features work inside the command string', async () =>
   {
     // `true && true` requires the shell to parse && — proves shell mode.
