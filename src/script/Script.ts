@@ -350,9 +350,20 @@ export class Script
 
     try
     {
-      const runtime = (process.versions as Record<string, string | undefined>).bun
-        ? `Bun ${(process.versions as Record<string, string>).bun} (Node compat ${process.version})`
-        : `Node ${process.version}`;
+      const versions = process.versions as Record<string, string | undefined>;
+      let runtime: string;
+      if (versions.bun)
+      {
+        runtime = `Bun ${versions.bun}`;
+      }
+      else if (versions.deno)
+      {
+        runtime = `Deno ${versions.deno}`;
+      }
+      else
+      {
+        runtime = `Node ${process.version}`;
+      }
       lines.push(`     Runtime: ${runtime}`);
     }
     catch (_: unknown)

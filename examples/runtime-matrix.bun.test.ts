@@ -98,7 +98,12 @@ function runExample(runtime: Runtime, example: ExampleCase)
     ...example.args,
   ];
 
-  const result = spawnSync(command[0], command.slice(1), {
+  const [executable, ...restArgs] = command;
+  if (!executable)
+  {
+    throw new Error(`empty command array for ${runtime.name}`);
+  }
+  const result = spawnSync(executable, restArgs, {
     cwd: projectRoot,
     encoding: 'utf8',
     env: {

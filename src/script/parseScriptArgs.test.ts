@@ -1,5 +1,6 @@
-import { describe, expect, test } from 'bun:test';
+import { expect } from '@std/expect';
 
+import { describe, test } from '@axhxrx/test';
 import { parseScriptArgs } from './parseScriptArgs.ts';
 
 describe('parseScriptArgs', () =>

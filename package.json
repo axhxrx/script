@@ -7,12 +7,17 @@
   },
   "license": "MIT",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.2.0"
   },
   "dependencies": {
+    "@axhxrx/utf8-count": "npm:@jsr/axhxrx__utf8-count",
     "@axhxrx/write-new-file": "npm:@jsr/axhxrx__write-new-file@^0.1.0"
   },
   "devDependencies": {
+    "@axhxrx/test": "npm:@jsr/axhxrx__test@^0.1.1",
+    "@std/assert": "npm:@jsr/std__assert",
+    "@std/expect": "npm:@jsr/std__expect",
+    "@std/testing": "npm:@jsr/std__testing",
     "@types/bun": "^1.3.11"
   },
   "peerDependencies": {
@@ -22,5 +27,12 @@
     "src",
     "README.md",
     "LICENSE"
-  ]
+  ],
+  "scripts": {
+    "check": "dprint check && deno check && deno lint && bun tsc --noEmit",
+    "test:bun": "bun test",
+    "test:node": "node --test --test-isolation=none $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')",
+    "test:deno": "deno test -A $(find src tools -name '*.test.ts' ! -name '*.bun.test.ts')",
+    "test": "bun run test:bun && bun run test:node && bun run test:deno"
+  }
 }

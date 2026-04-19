@@ -1,6 +1,6 @@
 # @axhxrx/script
 
-This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as [Bun Shell](https://bun.com/docs/runtime/shell) , but it works on modern TypeScript runtimes, including Node.js 24+.
+This is a utility library for using TypeScript instead of shell scripts. It's not as lovable as [Bun Shell](https://bun.com/docs/runtime/shell), but it runs on Bun, Deno, and Node.js 24.2+.
 
 ## TL;DR
 
@@ -101,7 +101,7 @@ You can easily write a couple functions to make that more pleasant, but for the 
 
 ## But this library is just modern TypeScript
 
-Not as cute and concise as Bun Shell, but it works on modern runtimes, and even less-modern runtimes like Node.js 24+.
+Not as cute and concise as Bun Shell, but it works on every modern TypeScript runtime — Bun, Deno, and even less-modern runtimes like Node.js 24.2+.
 
 The point is to just make it more ergonomic to write your build scripts and deploy scripts and whatever scripts in TypeScript, and never write another shell script again.
 
@@ -352,9 +352,10 @@ import * as script from "jsr:@axhxrx/script";
 
 ## Runtime Notes
 
-- Node.js support target is 24+.
+- Supported runtimes: **Bun**, **Deno**, and **Node.js 24.2+**.
 - Live command-output capture uses a `bash` + `tee` pipeline.
 - If `bash` or `tee` is not available on `PATH`, Unix capture/file logging will fail with an explicit error.
+- The test suite runs on all three runtimes. Use `bun run test:bun`, `bun run test:node`, `bun run test:deno`, or `bun run test` to run all three in sequence. The tests use [@axhxrx/test](https://jsr.io/@axhxrx/test) to work around a gap in Deno's implementation of the Node test API.
 
 ## history
 
