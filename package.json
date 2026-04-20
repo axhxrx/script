@@ -1,7 +1,10 @@
 {
   "name": "@axhxrx/script",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
+  "bin": {
+    "retry-command": "./bin/retry-command.ts"
+  },
   "exports": {
     ".": "./src/mod.ts"
   },
@@ -24,6 +27,7 @@
     "typescript": "^5"
   },
   "files": [
+    "bin",
     "src",
     "README.md",
     "LICENSE"
