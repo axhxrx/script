@@ -60,6 +60,41 @@ Proceed with execution? [Y/n]:
 
 ...and the rest goes how you'd expect.
 
+
+## Why you might want to use this (or not)
+
+The weakest case for using this library is if you were already going to write your script in TypeScript. So let's start there.
+
+If your script is roughly:
+
+```ts
+await doThis();
+await doThat();
+if (something()) await doThirdThing();
+```
+
+then you might not benefit from this. You'd have to e.g. do:
+
+```ts
+add(doThis);
+add(doThat);
+if (something()) add(doThirdThing);
+await execute();
+```
+
+So that's some additional stuff to think about. You have to `add()` all the steps to your plan, and then `execute()` the plan. What you get in return is:
+
+- **Plan preview + confirmation** before anything runs. `--dry-run` is free.
+- **Consistent, structured output** — banners, per-step timing, unambiguous pass/fail.
+- **Auto-logged run artifacts** with system context, captured in stdout and (optionally) written to a log file via `.file()` or `--auto-log-to`.
+- **Mix shell commands and TypeScript functions** in the same plan, when you inevitably end up needing both.
+- **Composable failure handling**: `.or()`, `.and()`, `.skipIf()`, `.confirm()`, `.onError('warn')` — the basic knobs are there whenever you need them.
+- **Consistent CLI surface**: the standard arg parsing is free, and always works the same way.
+
+TL;DR — if your script is just three `await` function calls and it won't ever grow? You don't need this. But if it's something that has to be maintained over time, those benefits may justify the small amount of additional ceremony. Or not! `¯\_(ಠ_ಠ)_/¯`
+
+OTOH, if you were going to write an actual _shell script..._
+
 ## Why shell scripts make you die
 
 Shell scripts are great, until they suck. They're easy to get started with — just add some commands! But as soon as you need an `if` or a `loop` you begin the descent into madness. Five seconds later, you are staring at:
@@ -358,6 +393,8 @@ import * as script from "jsr:@axhxrx/script";
 - The test suite runs on all three runtimes. Use `bun run test:bun`, `bun run test:node`, `bun run test:deno`, or `bun run test` to run all three in sequence. The tests use [@axhxrx/test](https://jsr.io/@axhxrx/test) to work around a gap in Deno's implementation of the Node test API.
 
 ## history
+
+📖 2026-04-21: release 0.1.6 — Update README to clarify when to and not to use this
 
 🔧 2026-04-20: release 0.1.5 — Add retryCommand() & retry-command.ts CLI
 
