@@ -52,7 +52,7 @@ describe('shouldRetry', () =>
     const r = makeResult('boring output', 'boring stderr', ['ECONNRESET']);
     const d = shouldRetry(r, { ifPatterns: ['ECONNRESET'] });
     expect(d.retry).toBe(false);
-    expect(d.skipReason).toContain('no whitelist');
+    expect(d.skipReason).toContain('no allowlist');
   });
 
   test('--unless short-circuits even when --if would match', () =>
@@ -99,19 +99,19 @@ describe('shouldRetry', () =>
     expect(d.retry).toBe(true);
   });
 
-  test('--if-exit-code retries when exit code is in the whitelist', () =>
+  test('--if-exit-code retries when exit code is in the allowlist', () =>
   {
     const r = makeResult('', '', [], 28);
     const d = shouldRetry(r, { retryExitCodes: [7, 28] });
     expect(d.retry).toBe(true);
   });
 
-  test('--if-exit-code skips when exit code is NOT in the whitelist', () =>
+  test('--if-exit-code skips when exit code is NOT in the allowlist', () =>
   {
     const r = makeResult('', '', [], 22);
     const d = shouldRetry(r, { retryExitCodes: [7, 28] });
     expect(d.retry).toBe(false);
-    expect(d.skipReason).toContain('no whitelist');
+    expect(d.skipReason).toContain('no allowlist');
   });
 
   test('--unless-exit-code short-circuits even when --if would match', () =>
@@ -136,7 +136,7 @@ describe('shouldRetry', () =>
     expect(d.skipReason).toContain('--unless-exit-code');
   });
 
-  test('whitelists OR together: --if-exit-code satisfied is enough when --if is not', () =>
+  test('allowlists OR together: --if-exit-code satisfied is enough when --if is not', () =>
   {
     const r = makeResult('boring output', '', ['ECONNRESET'], 28);
     const d = shouldRetry(r, {
@@ -146,7 +146,7 @@ describe('shouldRetry', () =>
     expect(d.retry).toBe(true);
   });
 
-  test('whitelists OR together: --if satisfied is enough when --if-exit-code is not', () =>
+  test('allowlists OR together: --if satisfied is enough when --if-exit-code is not', () =>
   {
     const r = makeResult('ECONNRESET here', '', ['ECONNRESET'], 22);
     const d = shouldRetry(r, {
@@ -156,7 +156,7 @@ describe('shouldRetry', () =>
     expect(d.retry).toBe(true);
   });
 
-  test('whitelists OR together: both empty of hits → skip', () =>
+  test('allowlists OR together: both empty of hits → skip', () =>
   {
     const r = makeResult('boring output', '', ['ECONNRESET'], 22);
     const d = shouldRetry(r, {
@@ -164,7 +164,7 @@ describe('shouldRetry', () =>
       retryExitCodes: [28],
     });
     expect(d.retry).toBe(false);
-    expect(d.skipReason).toContain('no whitelist');
+    expect(d.skipReason).toContain('no allowlist');
   });
 
   test('empty retryExitCodes array is treated as "not set"', () =>

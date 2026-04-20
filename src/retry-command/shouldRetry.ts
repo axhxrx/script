@@ -23,8 +23,8 @@ function matched(result: CommandResult, pattern: string, selector: StreamSelecto
 
  1. `noRetryExitCodes` contains the exit code → don't retry.
  2. `unlessPatterns` matches the output → don't retry.
- 3. Any whitelist is present (`retryExitCodes` and/or `ifPatterns`): retry only if at least one whitelist is satisfied. The two whitelists are OR'd, so a hit on either is enough.
- 4. No whitelist is present → retry unconditionally.
+ 3. Any allowlist is present (`retryExitCodes` and/or `ifPatterns`): retry only if at least one allowlist is satisfied. The two allowlists are OR'd, so a hit on either is enough.
+ 4. No allowlist is present → retry unconditionally.
 
  The `streamSelector` option restricts which stream(s) are checked for `ifPatterns` / `unlessPatterns` (default: `'both'`). It does not affect exit-code rules.
  */
@@ -54,21 +54,21 @@ export function shouldRetry(result: CommandResult, options: RetryCommandOptions)
     }
   }
 
-  const exitWhitelist = options.retryExitCodes && options.retryExitCodes.length > 0
+  const exitAllowlist = options.retryExitCodes && options.retryExitCodes.length > 0
     ? options.retryExitCodes
     : undefined;
-  const patternWhitelist = options.ifPatterns && options.ifPatterns.length > 0 ? options.ifPatterns : undefined;
+  const patternAllowlist = options.ifPatterns && options.ifPatterns.length > 0 ? options.ifPatterns : undefined;
 
-  if (exitWhitelist || patternWhitelist)
+  if (exitAllowlist || patternAllowlist)
   {
-    const exitOK = exitWhitelist !== undefined && exitWhitelist.includes(result.exitCode);
-    const patternOK = patternWhitelist !== undefined && patternWhitelist.some(p => matched(result, p, selector));
+    const exitOK = exitAllowlist !== undefined && exitAllowlist.includes(result.exitCode);
+    const patternOK = patternAllowlist !== undefined && patternAllowlist.some(p => matched(result, p, selector));
 
     if (!exitOK && !patternOK)
     {
       return {
         retry: false,
-        skipReason: 'no whitelist condition matched (--if-exit-code / --if)',
+        skipReason: 'no allowlist condition matched (--if-exit-code / --if)',
       };
     }
   }

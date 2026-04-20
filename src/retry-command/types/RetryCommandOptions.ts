@@ -5,8 +5,8 @@ import type { StreamSelector } from './StreamSelector.ts';
 
  Pattern evaluation order when the command fails:
 
- 1. Any `unlessPatterns` match → don't retry (blacklist known-fatal errors).
- 2. `ifPatterns` registered → at least one must match to retry (whitelist known-transient errors).
+ 1. Any `unlessPatterns` match → don't retry (denylist known-fatal errors).
+ 2. `ifPatterns` registered → at least one must match to retry (allowlist known-transient errors).
  3. Neither specified → retry unconditionally.
  */
 export interface RetryCommandOptions
@@ -22,22 +22,22 @@ export interface RetryCommandOptions
   delayMs?: number;
 
   /**
-   Whitelist: if specified, the command's output must contain at least one of these substrings for a retry to occur.
+   Allowlist: if specified, the command's output must contain at least one of these substrings for a retry to occur.
    */
   ifPatterns?: readonly string[];
 
   /**
-   Blacklist: if any of these substrings appear in the command's output, no retry is attempted.
+   Denylist: if any of these substrings appear in the command's output, no retry is attempted.
    */
   unlessPatterns?: readonly string[];
 
   /**
-   Whitelist on the child's exit code. If specified, a retry is only attempted when the exit code is in this list. Composes with `ifPatterns`: if either whitelist is satisfied, the command is considered retry-eligible.
+   Allowlist on the child's exit code. If specified, a retry is only attempted when the exit code is in this list. Composes with `ifPatterns`: if either allowlist is satisfied, the command is considered retry-eligible.
    */
   retryExitCodes?: readonly number[];
 
   /**
-   Blacklist on the child's exit code. If any of these exit codes is produced, no retry is attempted. Useful for short-circuiting on fatal codes (e.g. `--unless-exit-code 143` to not retry when the child was SIGTERM'd from above).
+   Denylist on the child's exit code. If any of these exit codes is produced, no retry is attempted. Useful for short-circuiting on fatal codes (e.g. `--unless-exit-code 143` to not retry when the child was SIGTERM'd from above).
    */
   noRetryExitCodes?: readonly number[];
 
