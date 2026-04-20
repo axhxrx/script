@@ -21,6 +21,8 @@ const optionConfig = {
   'delay-ms': { type: 'string' },
   if: { type: 'string', multiple: true },
   unless: { type: 'string', multiple: true },
+  'if-exit-code': { type: 'string', multiple: true },
+  'unless-exit-code': { type: 'string', multiple: true },
   'stdout-only': { type: 'boolean' },
   'stderr-only': { type: 'boolean' },
   quiet: { type: 'boolean', short: 'q' },
@@ -43,6 +45,35 @@ function parseNonNegativeInteger(rawValue: string | undefined, optionName: strin
   return Number.parseInt(rawValue, 10);
 }
 
+/**
+ Parse one occurrence of an exit-code list option. Accepts a comma-separated string of non-negative integers. Whitespace around each entry is tolerated; empty tokens are rejected.
+ */
+function parseExitCodeList(rawValue: string, optionName: string): number[]
+{
+  const tokens = rawValue.split(',').map(t => t.trim());
+  if (tokens.length === 0 || tokens.some(t => t.length === 0))
+  {
+    throw new Error(`${optionName} has an empty value or trailing comma.`);
+  }
+  return tokens.map(token =>
+  {
+    if (!NON_NEGATIVE_INTEGER.test(token))
+    {
+      throw new Error(`${optionName}: "${token}" is not a non-negative integer.`);
+    }
+    return Number.parseInt(token, 10);
+  });
+}
+
+function parseExitCodeLists(rawValues: readonly string[] | undefined, optionName: string): number[] | undefined
+{
+  if (rawValues === undefined || rawValues.length === 0)
+  {
+    return undefined;
+  }
+  return rawValues.flatMap(raw => parseExitCodeList(raw, optionName));
+}
+
 export function printHelp(): void
 {
   console.log(
@@ -57,6 +88,8 @@ Options:
   --delay-ms <n>         Delay between retries in ms (default: ${DEFAULT_DELAY_MS})
   --if <pattern>         Only retry if output contains <pattern> (repeatable)
   --unless <pattern>     Don't retry if output contains <pattern> (repeatable)
+  --if-exit-code <list>  Only retry if exit code is in <list> (comma-separated; repeatable)
+  --unless-exit-code <list> Don't retry if exit code is in <list> (comma-separated; repeatable)
   --stdout-only          Only scan the child's stdout for --if/--unless patterns
   --stderr-only          Only scan the child's stderr for --if/--unless patterns
   --quiet, -q            Suppress retry progress output and summaries (usage/validation errors still print)
@@ -67,6 +100,7 @@ Examples:
   retry-command --max-retries 3 "pnpm build"
   retry-command --if "ECONNRESET" --unless "compilation failed" "pnpm build"
   retry-command --stderr-only --if "Unhandled 'error'" "pnpm test --shard=1/3"
+  retry-command --if-exit-code 7,28 --unless-exit-code 22 "curl -sSf https://example.com"
 `,
   );
 }
@@ -114,12 +148,16 @@ export function parseCli(argv: readonly string[]): ParseCliResult
 
     const maxRetries = parseNonNegativeInteger(values['max-retries'], '--max-retries');
     const delayMs = parseNonNegativeInteger(values['delay-ms'], '--delay-ms');
+    const retryExitCodes = parseExitCodeLists(values['if-exit-code'], '--if-exit-code');
+    const noRetryExitCodes = parseExitCodeLists(values['unless-exit-code'], '--unless-exit-code');
 
     const options: RetryCommandOptions = {
       maxRetries,
       delayMs,
       ifPatterns: values.if,
       unlessPatterns: values.unless,
+      retryExitCodes,
+      noRetryExitCodes,
       streamSelector: values['stdout-only'] ? 'stdout' : values['stderr-only'] ? 'stderr' : 'both',
       quiet: values.quiet,
       json: values.json,

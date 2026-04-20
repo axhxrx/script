@@ -17,19 +17,28 @@ function matched(result: CommandResult, pattern: string, selector: StreamSelecto
 }
 
 /**
- Decide whether a failed command should be retried based on its output.
+ Decide whether a failed command should be retried based on its exit code and output.
 
- Evaluation order:
+ Evaluation order (first match wins):
 
- 1. `unlessPatterns`: if any match, don't retry.
- 2. `ifPatterns`: if specified, at least one must match to retry.
- 3. Neither specified: retry unconditionally.
+ 1. `noRetryExitCodes` contains the exit code → don't retry.
+ 2. `unlessPatterns` matches the output → don't retry.
+ 3. Any whitelist is present (`retryExitCodes` and/or `ifPatterns`): retry only if at least one whitelist is satisfied. The two whitelists are OR'd, so a hit on either is enough.
+ 4. No whitelist is present → retry unconditionally.
 
- The `streamSelector` option restricts which stream(s) are checked (default: `'both'`). The same selector applies to both `if` and `unless` patterns.
+ The `streamSelector` option restricts which stream(s) are checked for `ifPatterns` / `unlessPatterns` (default: `'both'`). It does not affect exit-code rules.
  */
 export function shouldRetry(result: CommandResult, options: RetryCommandOptions): RetryDecision
 {
   const selector: StreamSelector = options.streamSelector ?? 'both';
+
+  if (options.noRetryExitCodes && options.noRetryExitCodes.includes(result.exitCode))
+  {
+    return {
+      retry: false,
+      skipReason: `exit code ${result.exitCode} matched --unless-exit-code`,
+    };
+  }
 
   if (options.unlessPatterns)
   {
@@ -45,14 +54,21 @@ export function shouldRetry(result: CommandResult, options: RetryCommandOptions)
     }
   }
 
-  if (options.ifPatterns && options.ifPatterns.length > 0)
+  const exitWhitelist = options.retryExitCodes && options.retryExitCodes.length > 0
+    ? options.retryExitCodes
+    : undefined;
+  const patternWhitelist = options.ifPatterns && options.ifPatterns.length > 0 ? options.ifPatterns : undefined;
+
+  if (exitWhitelist || patternWhitelist)
   {
-    const any = options.ifPatterns.some(p => matched(result, p, selector));
-    if (!any)
+    const exitOK = exitWhitelist !== undefined && exitWhitelist.includes(result.exitCode);
+    const patternOK = patternWhitelist !== undefined && patternWhitelist.some(p => matched(result, p, selector));
+
+    if (!exitOK && !patternOK)
     {
       return {
         retry: false,
-        skipReason: 'output did not match any --if pattern',
+        skipReason: 'no whitelist condition matched (--if-exit-code / --if)',
       };
     }
   }

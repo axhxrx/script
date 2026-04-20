@@ -109,4 +109,61 @@ describe('parseCli', () =>
     const r = parseCli(['--wacky-flag', 'pnpm test']);
     expect(r.error).toBeDefined();
   });
+
+  test('parses --if-exit-code as a comma-separated list', () =>
+  {
+    const r = parseCli(['--if-exit-code', '7,28,30', 'curl example.com']);
+    expect(r.error).toBeUndefined();
+    expect(r.options.retryExitCodes).toEqual([7, 28, 30]);
+  });
+
+  test('tolerates whitespace around comma-separated exit codes', () =>
+  {
+    const r = parseCli(['--if-exit-code', ' 7 , 28 ,30 ', 'curl example.com']);
+    expect(r.error).toBeUndefined();
+    expect(r.options.retryExitCodes).toEqual([7, 28, 30]);
+  });
+
+  test('concatenates multiple --if-exit-code occurrences', () =>
+  {
+    const r = parseCli(['--if-exit-code', '7,28', '--if-exit-code', '30', 'curl example.com']);
+    expect(r.options.retryExitCodes).toEqual([7, 28, 30]);
+  });
+
+  test('parses --unless-exit-code similarly', () =>
+  {
+    const r = parseCli(['--unless-exit-code', '22,143', 'curl example.com']);
+    expect(r.options.noRetryExitCodes).toEqual([22, 143]);
+  });
+
+  test('rejects non-integer token in --if-exit-code list', () =>
+  {
+    const r = parseCli(['--if-exit-code', '7,abc', 'curl example.com']);
+    expect(r.error).toContain('--if-exit-code');
+  });
+
+  test('rejects negative token in --if-exit-code list', () =>
+  {
+    const r = parseCli(['--if-exit-code', '7,-1', 'curl example.com']);
+    expect(r.error).toContain('--if-exit-code');
+  });
+
+  test('rejects trailing comma in --if-exit-code list', () =>
+  {
+    const r = parseCli(['--if-exit-code', '7,28,', 'curl example.com']);
+    expect(r.error).toContain('--if-exit-code');
+  });
+
+  test('rejects empty --if-exit-code value', () =>
+  {
+    const r = parseCli(['--if-exit-code', '', 'curl example.com']);
+    expect(r.error).toContain('--if-exit-code');
+  });
+
+  test('omitting exit-code flags leaves options undefined', () =>
+  {
+    const r = parseCli(['curl example.com']);
+    expect(r.options.retryExitCodes).toBeUndefined();
+    expect(r.options.noRetryExitCodes).toBeUndefined();
+  });
 });

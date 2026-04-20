@@ -32,6 +32,16 @@ export interface RetryCommandOptions
   unlessPatterns?: readonly string[];
 
   /**
+   Whitelist on the child's exit code. If specified, a retry is only attempted when the exit code is in this list. Composes with `ifPatterns`: if either whitelist is satisfied, the command is considered retry-eligible.
+   */
+  retryExitCodes?: readonly number[];
+
+  /**
+   Blacklist on the child's exit code. If any of these exit codes is produced, no retry is attempted. Useful for short-circuiting on fatal codes (e.g. `--unless-exit-code 143` to not retry when the child was SIGTERM'd from above).
+   */
+  noRetryExitCodes?: readonly number[];
+
+  /**
    Which streams to scan for `ifPatterns` / `unlessPatterns`. Default: `'both'`.
    */
   streamSelector?: StreamSelector;
