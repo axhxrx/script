@@ -359,6 +359,8 @@ import * as script from "jsr:@axhxrx/script";
 
 ## history
 
+🔧 2026-04-20: release 0.1.5 — Add retryCommand() & retry-command.ts CLI
+
 🔧 2026-04-09: release 0.1.4 — Fix missing export (of `ask()`)
 
 🔧 2026-03-29: release 0.1.3 — Add .skipIf() for more ergonomic skip conditions
