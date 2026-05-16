@@ -10,6 +10,7 @@ describe('parseScriptArgs', () =>
     const result = parseScriptArgs([]);
     expect(result.dryRun).toBe(false);
     expect(result.yes).toBe(false);
+    expect(result.skipValidations).toBe(false);
     expect(result.otherArgs).toEqual([]);
   });
 
@@ -113,5 +114,28 @@ describe('parseScriptArgs', () =>
   {
     const result = parseScriptArgs(['--auto-log-to', '/first', '--auto-log-to', '/second']);
     expect(result.autoLogTo).toBe('/second');
+  });
+
+  test('parses --skip-validations', () =>
+  {
+    const result = parseScriptArgs(['--skip-validations']);
+    expect(result.skipValidations).toBe(true);
+    expect(result.dryRun).toBe(false);
+    expect(result.yes).toBe(false);
+  });
+
+  test('parses --skipValidations (camelCase)', () =>
+  {
+    const result = parseScriptArgs(['--skipValidations']);
+    expect(result.skipValidations).toBe(true);
+  });
+
+  test('--skip-validations combines with other flags', () =>
+  {
+    const result = parseScriptArgs(['--dry-run', '--skip-validations', '--yes', 'target']);
+    expect(result.dryRun).toBe(true);
+    expect(result.yes).toBe(true);
+    expect(result.skipValidations).toBe(true);
+    expect(result.otherArgs).toEqual(['target']);
   });
 });

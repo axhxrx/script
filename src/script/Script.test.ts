@@ -1271,6 +1271,189 @@ describe('chainResults tracking', () =>
   });
 });
 
+describe('Script-level validations with --dry-run and --skip-validations', () =>
+{
+  let originalArgv: string[];
+
+  beforeEach(() =>
+  {
+    originalArgv = [...process.argv];
+  });
+
+  afterEach(() =>
+  {
+    process.argv = originalArgv;
+  });
+
+  test('dry-run with passing validation prints plan and completes', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always passes', () =>
+    {
+      validationRan = true;
+      return true;
+    });
+    script.add('echo test');
+
+    const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
+
+    expect(validationRan).toBe(true);
+    expect(result.state).toBe('complete');
+    expect(result.aborted).toBe(false);
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('dry-run with failing validation aborts and does NOT print plan', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always fails', () =>
+    {
+      validationRan = true;
+      return 'computer says no';
+    });
+    script.add('echo never');
+
+    const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
+
+    expect(validationRan).toBe(true);
+    expect(result.state).toBe('failed');
+    expect(result.aborted).toBe(true);
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('--skip-validations + failing validation runs plan (real execution)', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always fails', () =>
+    {
+      validationRan = true;
+      return 'this would block execution';
+    });
+    script.add('echo skipped-validations-real-run');
+
+    const result = await script.execute({
+      skipValidations: true,
+      yes: true,
+      parseArgs: false,
+      printResults: false,
+    });
+
+    expect(validationRan).toBe(false);
+    expect(result.state).toBe('complete');
+    expect(result.executed).toBe(true);
+    expect(result.stepsRun).toBe(1);
+    const step = result.stepResults[0];
+    assert(step);
+    expect(step.stdout).toBe('skipped-validations-real-run\n');
+  });
+
+  test('--skip-validations + --dry-run + failing validation prints plan, completes', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always fails', () =>
+    {
+      validationRan = true;
+      return 'preview-only failure';
+    });
+    script.add('echo plan-step');
+
+    const result = await script.execute({
+      dryRun: true,
+      skipValidations: true,
+      parseArgs: false,
+      printResults: false,
+    });
+
+    expect(validationRan).toBe(false);
+    expect(result.state).toBe('complete');
+    expect(result.aborted).toBe(false);
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('parses --skip-validations from process.argv by default', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always fails', () =>
+    {
+      validationRan = true;
+      return false;
+    });
+    script.add('echo cli-parsed');
+
+    process.argv = ['node', 'script.ts', '--skip-validations'];
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(validationRan).toBe(false);
+    expect(result.state).toBe('complete');
+    expect(result.executed).toBe(true);
+    expect(result.stepsRun).toBe(1);
+  });
+
+  test('explicit skipValidations: false overrides --skip-validations from argv', async () =>
+  {
+    const script = new Script();
+    let validationRan = false;
+
+    script.validate('always fails', () =>
+    {
+      validationRan = true;
+      return 'blocked';
+    });
+    script.add('echo unreachable');
+
+    process.argv = ['node', 'script.ts', '--skip-validations'];
+
+    const result = await script.execute({
+      skipValidations: false,
+      yes: true,
+      printResults: false,
+    });
+
+    expect(validationRan).toBe(true);
+    expect(result.state).toBe('failed');
+    expect(result.aborted).toBe(true);
+  });
+
+  test('real run with failing validation still aborts (unchanged from prior behavior)', async () =>
+  {
+    const script = new Script();
+    script.validate('always fails', () => 'no');
+    script.add('echo unreachable');
+
+    const result = await script.execute({ yes: true, parseArgs: false, printResults: false });
+
+    expect(result.state).toBe('failed');
+    expect(result.aborted).toBe(true);
+    expect(result.executed).toBe(false);
+    expect(result.stepsRun).toBe(0);
+  });
+
+  test('dry-run with no validations completes (regression)', async () =>
+  {
+    const script = new Script();
+    script.add('echo nothing-to-validate');
+
+    const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
+
+    expect(result.state).toBe('complete');
+    expect(result.executed).toBe(false);
+  });
+});
+
 describe('.skipIf() — conditional step skipping', () =>
 {
   test('skipIf(true) skips the step', async () =>

@@ -16,6 +16,11 @@ export interface ParsedScriptArgs
   yes: boolean;
 
   /**
+   Whether --skip-validations or --skipValidations was passed.
+   */
+  skipValidations: boolean;
+
+  /**
    Directory path from --auto-log-to or --autoLogTo, if specified.
    */
   autoLogTo?: string;
@@ -32,6 +37,7 @@ export interface ParsedScriptArgs
  Recognizes:
  - `--dryRun` or `--dry-run` → `dryRun: true`
  - `-y` or `--yes` → `yes: true`
+ - `--skip-validations` or `--skipValidations` → `skipValidations: true`
  - `--auto-log-to <dir>` or `--autoLogTo <dir>` → `autoLogTo: '<dir>'`
 
  All other arguments are returned in `otherArgs`.
@@ -59,6 +65,7 @@ export function parseScriptArgs(args: string[] = process.argv.slice(2)): ParsedS
 {
   let dryRun = false;
   let yes = false;
+  let skipValidations = false;
   let autoLogTo: string | undefined;
   const otherArgs: string[] = [];
 
@@ -73,6 +80,10 @@ export function parseScriptArgs(args: string[] = process.argv.slice(2)): ParsedS
     else if (arg === '-y' || arg === '--yes')
     {
       yes = true;
+    }
+    else if (arg === '--skip-validations' || arg === '--skipValidations')
+    {
+      skipValidations = true;
     }
     else if (arg === '--auto-log-to' || arg === '--autoLogTo')
     {
@@ -90,7 +101,7 @@ export function parseScriptArgs(args: string[] = process.argv.slice(2)): ParsedS
     }
   }
 
-  return { dryRun, yes, autoLogTo, otherArgs };
+  return { dryRun, yes, skipValidations, autoLogTo, otherArgs };
 }
 
 if (import.meta.main)

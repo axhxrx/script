@@ -53,8 +53,12 @@ const examples: ExampleCase[] = [
     expectedText: 'Command log:',
   },
   {
+    // --skip-validations: this example has a "working directory clean"
+    // validation that would (correctly) fail when tests run against a
+    // dirty working tree. We're only verifying the example executes
+    // end-to-end here, so skipping validations is appropriate.
     file: '06-deploy-skeleton.ts',
-    args: ['--dry-run'],
+    args: ['--dry-run', '--skip-validations'],
     expectedText: 'Deploy Plan',
   },
   {
@@ -63,8 +67,12 @@ const examples: ExampleCase[] = [
     expectedText: 'Build Script',
   },
   {
+    // --skip-validations: this example has a "working directory clean"
+    // validation that would (correctly) fail when tests run against a
+    // dirty working tree. We're only verifying the example executes
+    // end-to-end here, so skipping validations is appropriate.
     file: '08-release-prep.ts',
-    args: ['--dry-run'],
+    args: ['--dry-run', '--skip-validations'],
     expectedText: 'Release prep complete',
   },
 ];

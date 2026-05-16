@@ -198,7 +198,27 @@ Total: 4 steps
 Proceed with execution? [Y/n]:
 ```
 
-Use `execute({ yes: true });` to skip the confirmation. By default, `execute()` parses `--yes`/`-y`, `--dry-run`/`--dryRun`, and `--auto-log-to <dir>` from the command line args. Pass `execute({ parseArgs: false })` to opt out.
+Use `execute({ yes: true });` to skip the confirmation. By default, `execute()` parses `--yes`/`-y`, `--dry-run`/`--dryRun`, `--skip-validations`/`--skipValidations`, and `--auto-log-to <dir>` from the command line args. Pass `execute({ parseArgs: false })` to opt out.
+
+### `--dry-run` and validations
+
+`--dry-run` runs script-level `validate()` checks first, then prints the plan. The point of dry-run is to answer "would this work?" — if a prereq is missing or some other validation fails, the dry-run aborts with the same failure semantics as a real run. (Earlier versions silently bypassed validations during dry-run, which lied to the user.)
+
+If you need to preview a plan even when validations would fail — for example, you're previewing an installer for a tool whose prereq you're about to install separately — use `--skip-validations`:
+
+```bash
+# Show me the plan even though prereqs aren't here yet
+./install-foo.ts --dry-run --skip-validations
+```
+
+`--skip-validations` also works for real runs:
+
+```bash
+# I know validations would fail. Run it anyway.
+./install-foo.ts --skip-validations --yes
+```
+
+Step-level `.validate()` checks are NOT bypassed by `--skip-validations` — only script-level `validate()` calls.
 
 OK, fine. But the above still isn't really any better than this `bash` script:
 
@@ -352,7 +372,7 @@ The library also exports helpers for common scripting tasks:
 | -------- | ----------- |
 | `run(cmd)` | Execute a shell command, stream output to terminal |
 | `runQuiet(cmd)` | Execute silently, return output as string |
-| `parseScriptArgs()` | Parse `--dry-run`, `--yes`/`-y`, and `--auto-log-to` from CLI args |
+| `parseScriptArgs()` | Parse `--dry-run`, `--yes`/`-y`, `--skip-validations`, and `--auto-log-to` from CLI args |
 | `autoRedact(text)` | Redact common secrets (API keys, tokens, passwords) |
 | `promptYesNo(question)` | Interactive yes/no prompt |
 | `promptForValue(question)` | Interactive text input prompt |

@@ -818,6 +818,7 @@ export class Script
     const parseArgs = options.parseArgs ?? DEFAULT_EXECUTE_OPTIONS.parseArgs;
     let dryRun = options.dryRun;
     let yes = options.yes;
+    let skipValidations = options.skipValidations;
     let autoLogTo = options.autoLogTo;
 
     if (parseArgs)
@@ -825,6 +826,7 @@ export class Script
       const parsed = parseScriptArgs();
       dryRun = options.dryRun ?? parsed.dryRun;
       yes = options.yes ?? parsed.yes;
+      skipValidations = options.skipValidations ?? parsed.skipValidations;
       autoLogTo = options.autoLogTo ?? parsed.autoLogTo;
     }
 
@@ -860,23 +862,31 @@ export class Script
       return result;
     }
 
+    // Run script-level validations before showing plan, dry-run, or doing
+    // anything else. `--dry-run` must run validations too — its purpose is to
+    // answer "would this work?", and silently bypassing validations would make
+    // it lie. The --skip-validations / skipValidations escape hatch is for the
+    // rare case where the user knows validations would fail (e.g. prereqs
+    // aren't installed yet) but still wants to see/run the plan.
+    if (!skipValidations)
+    {
+      const validationsPassed = await this.#runScriptValidations();
+      if (!validationsPassed)
+      {
+        result.aborted = true;
+        result.state = 'failed';
+        if (printResults)
+        {
+          this.#printResultsSummary(result);
+        }
+        return result;
+      }
+    }
+
     if (dryRun)
     {
       this.#printPlan('📋 Execution Plan (dry run)');
       result.state = 'complete';
-      return result;
-    }
-
-    // Run script-level validations before showing plan or doing anything
-    const validationsPassed = await this.#runScriptValidations();
-    if (!validationsPassed)
-    {
-      result.aborted = true;
-      result.state = 'failed';
-      if (printResults)
-      {
-        this.#printResultsSummary(result);
-      }
       return result;
     }
 

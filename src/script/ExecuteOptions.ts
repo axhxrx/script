@@ -5,6 +5,8 @@ export interface ExecuteOptions
 {
   /**
    Print the plan without executing.
+
+   `--dry-run` still runs script-level validations first, so dry-run honestly answers "would this work?". If validations fail, the plan is NOT printed and the script aborts the same way a real run would. Use `skipValidations` if you want to preview the plan even when validations would fail (e.g. you're previewing a script whose prereqs aren't installed yet).
    */
   dryRun?: boolean;
 
@@ -12,6 +14,15 @@ export interface ExecuteOptions
    Skip the confirmation prompt and run immediately. By default, execute() shows the plan and asks for confirmation.
    */
   yes?: boolean;
+
+  /**
+   Skip all script-level validations registered via `validate()`. This is the escape hatch for the rare case where you legitimately want to bypass validations — for example, previewing a plan via `--dry-run` for a script whose prereqs aren't installed yet, or kicking off a real run when you're about to install the missing prereqs in a wrapper.
+
+   Step-level `.validate()` checks are NOT affected by this option; only script-level `validate()` calls.
+
+   Equivalent to `--skip-validations` / `--skipValidations` on the command line.
+   */
+  skipValidations?: boolean;
 
   /**
    Prompt for confirmation before each individual step. Individual steps can also have their own .confirm() setting.
