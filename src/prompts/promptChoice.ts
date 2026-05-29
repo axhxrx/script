@@ -92,9 +92,9 @@ export async function promptChoice(
         }
       }
 
-      const errMsg = `  Invalid answer ${
-        answer.length > 0 ? `'${raw.trim()}'` : '(empty)'
-      }. Please enter one of: ${keys.join(', ')} — or press Ctrl-C to cancel.\n`;
+      const errMsg = `  Invalid answer ${answer.length > 0 ? `'${raw.trim()}'` : '(empty)'}. Please enter one of: ${
+        keys.join(', ')
+      } — or press Ctrl-C to cancel.\n`;
       output.write(errMsg);
       options.mirrorOutput?.(errMsg);
     }
