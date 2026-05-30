@@ -27,7 +27,7 @@ import process, { stdin as input, stdout as output } from 'node:process';
  @param options.mask - Character echoed per keystroke. Default `'*'`. `false` = no echo.
  @returns The entered secret. May be empty (caller's responsibility to enforce length).
  */
-export async function promptSecret(
+export function promptSecret(
   prompt: string,
   options: { mask?: string | false } = {},
 ): Promise<string>
