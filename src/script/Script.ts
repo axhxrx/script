@@ -8,7 +8,7 @@ import process from 'node:process';
 
 import { ask } from './ask.ts';
 import type { ExecuteOptions } from './ExecuteOptions.ts';
-import type { ExecuteResult } from './ExecuteResult.ts';
+import type { ExecuteResult, ExecuteStatus, ExecuteWarning, ScriptState } from './ExecuteResult.ts';
 import type { FileOptions } from './FileOptions.ts';
 import { normalizeFileOptions } from './FileOptions.ts';
 import { OutputContext } from './OutputContext.ts';
@@ -32,6 +32,37 @@ const DEFAULT_EXECUTE_OPTIONS = {
   Required<ExecuteOptions>,
   'parseArgs' | 'printResults' | 'captureOutput'
 >;
+
+interface ExecuteProgress
+{
+  executed: boolean;
+  stepsRun: number;
+  totalStepsRun: number;
+  stepsSkipped: number;
+  stepsFailed: number;
+  stepsWarned: number;
+  warnings: ExecuteWarning[];
+}
+
+interface FinishExecuteOptions
+{
+  aborted?: boolean;
+  error?: Error;
+  includeDuration?: boolean;
+}
+
+function getLegacyState(status: ExecuteStatus): ScriptState
+{
+  switch (status)
+  {
+    case 'success':
+    case 'dry-run':
+      return 'complete';
+    case 'failed':
+    case 'aborted':
+      return 'failed';
+  }
+}
 
 function toChainResult(linkType: ChainLinkType, result: StepResult): ChainStepResult
 {
@@ -180,6 +211,14 @@ export class Script
     }
 
     return filePath;
+  }
+
+  /**
+   Flush pending output writes and close the current script-level output context.
+   */
+  async close(): Promise<void>
+  {
+    await this.#outputContext.close();
   }
 
   /**
@@ -845,21 +884,49 @@ export class Script
 
     const startTime = Date.now();
 
-    const result: ExecuteResult = {
+    const progress: ExecuteProgress = {
       executed: false,
       stepsRun: 0,
       totalStepsRun: 0,
       stepsSkipped: 0,
-      aborted: false,
-      state: 'planning',
-      stepResults: [],
+      stepsFailed: 0,
+      stepsWarned: 0,
+      warnings: [],
+    };
+
+    const finish = (status: ExecuteStatus, finishOptions: FinishExecuteOptions = {}): ExecuteResult =>
+    {
+      const result: ExecuteResult = {
+        status,
+        executed: progress.executed,
+        stepsRun: progress.stepsRun,
+        totalStepsRun: progress.totalStepsRun,
+        stepsSkipped: progress.stepsSkipped,
+        stepsFailed: progress.stepsFailed,
+        stepsWarned: progress.stepsWarned,
+        warnings: [...progress.warnings],
+        aborted: finishOptions.aborted ?? false,
+        state: getLegacyState(status),
+        stepResults: [...this.#stepResults],
+      };
+
+      if (finishOptions.error)
+      {
+        result.error = finishOptions.error;
+      }
+
+      if (finishOptions.includeDuration)
+      {
+        result.totalDurationMs = Date.now() - startTime;
+      }
+
+      return result;
     };
 
     if (this.#steps.length === 0)
     {
       ctx.log('\n📋 No steps to execute.\n');
-      result.state = 'complete';
-      return result;
+      return finish('success');
     }
 
     // Run script-level validations before showing plan, dry-run, or doing
@@ -873,8 +940,7 @@ export class Script
       const validationsPassed = await this.#runScriptValidations();
       if (!validationsPassed)
       {
-        result.aborted = true;
-        result.state = 'failed';
+        const result = finish('failed', { aborted: true });
         if (printResults)
         {
           this.#printResultsSummary(result);
@@ -886,8 +952,7 @@ export class Script
     if (dryRun)
     {
       this.#printPlan('📋 Execution Plan (dry run)');
-      result.state = 'complete';
-      return result;
+      return finish('dry-run');
     }
 
     // Show plan and ask for confirmation unless --yes was passed
@@ -898,8 +963,7 @@ export class Script
       if (!proceed)
       {
         ctx.log('\n❌ Aborted.\n');
-        result.aborted = true;
-        result.state = 'failed';
+        const result = finish('aborted', { aborted: true });
         if (printResults)
         {
           this.#printResultsSummary(result);
@@ -949,7 +1013,7 @@ export class Script
           skipReason: 'skipIf condition met',
         };
         this.#stepResults.push(skipResult);
-        result.stepsSkipped++;
+        progress.stepsSkipped++;
         continue;
       }
 
@@ -971,10 +1035,7 @@ export class Script
             ctx.log(`    └─ ${validationResult.error}`);
           }
           ctx.error('\n❌ Step validation failed.\n');
-          result.aborted = true;
-          result.state = 'failed';
-          result.stepResults = [...this.#stepResults];
-          result.totalDurationMs = Date.now() - startTime;
+          const result = finish('failed', { aborted: true, includeDuration: true });
           if (printResults)
           {
             this.#printResultsSummary(result);
@@ -999,10 +1060,7 @@ export class Script
           if (step.options.canSkip === false)
           {
             ctx.error('\n❌ Aborted (step cannot be skipped).');
-            result.aborted = true;
-            result.state = 'failed';
-            result.stepResults = [...this.#stepResults];
-            result.totalDurationMs = Date.now() - startTime;
+            const result = finish('aborted', { aborted: true, includeDuration: true });
             if (printResults)
             {
               this.#printResultsSummary(result);
@@ -1031,7 +1089,7 @@ export class Script
             skipReason: 'User declined confirmation',
           };
           this.#stepResults.push(skipResult);
-          result.stepsSkipped++;
+          progress.stepsSkipped++;
           continue;
         }
       }
@@ -1040,9 +1098,10 @@ export class Script
       {
         const stepResult = await this.#executeStepChain(step, i, captureOutput);
         this.#stepResults.push(stepResult);
-        result.stepsRun++;
-        result.totalStepsRun += this.#getExecutedStepCount(stepResult);
-        result.executed = true; // Only true after at least one step completes
+        progress.stepsRun++;
+        progress.totalStepsRun += this.#getExecutedStepCount(stepResult);
+        this.#recordStepOutcome(progress, stepResult);
+        progress.executed = true; // Only true after at least one step completes
       }
       catch (error: unknown)
       {
@@ -1051,15 +1110,16 @@ export class Script
         if (errWithResult.stepResult)
         {
           this.#stepResults.push(errWithResult.stepResult);
-          result.totalStepsRun += this.#getExecutedStepCount(errWithResult.stepResult);
+          progress.totalStepsRun += this.#getExecutedStepCount(errWithResult.stepResult);
+          this.#recordStepOutcome(progress, errWithResult.stepResult);
         }
 
         // Capture the error so callers can inspect it while still having access to partial results
-        result.error = error instanceof Error ? error : new Error(String(error));
-        result.aborted = true;
-        result.state = 'failed';
-        result.stepResults = [...this.#stepResults];
-        result.totalDurationMs = Date.now() - startTime;
+        const result = finish('failed', {
+          aborted: true,
+          error: error instanceof Error ? error : new Error(String(error)),
+          includeDuration: true,
+        });
         if (printResults)
         {
           this.#printResultsSummary(result);
@@ -1074,9 +1134,7 @@ export class Script
       printBanner(this.#banners.get(this.#steps.length)!, ctx);
     }
 
-    result.state = 'complete';
-    result.stepResults = [...this.#stepResults];
-    result.totalDurationMs = Date.now() - startTime;
+    const result = finish('success', { includeDuration: true });
 
     ctx.log('✅ All steps completed.\n');
     if (printResults)
@@ -1157,6 +1215,79 @@ export class Script
   }
 
   /**
+   Record failed and warned concrete steps in the top-level execution result.
+   */
+  #recordStepOutcome(result: ExecuteProgress, stepResult: StepResult): void
+  {
+    for (const concreteStep of this.#getConcreteStepResults(stepResult))
+    {
+      if (concreteStep.status !== 'warning' && concreteStep.status !== 'error')
+      {
+        continue;
+      }
+
+      if (concreteStep.status === 'warning')
+      {
+        result.stepsWarned++;
+        result.warnings.push(this.#toExecuteWarning(stepResult.index, concreteStep));
+        continue;
+      }
+
+      result.stepsFailed++;
+    }
+  }
+
+  /**
+   Expand a top-level step result into the concrete steps represented by it.
+   */
+  #getConcreteStepResults(stepResult: StepResult): readonly (StepResult | ChainStepResult)[]
+  {
+    if (stepResult.chainResults && stepResult.chainResults.length > 0)
+    {
+      return stepResult.chainResults;
+    }
+
+    return [stepResult];
+  }
+
+  /**
+   Convert a warning step result into the public warning shape.
+   */
+  #toExecuteWarning(stepIndex: number, stepResult: StepResult | ChainStepResult): ExecuteWarning
+  {
+    const warning: ExecuteWarning = {
+      stepIndex,
+      description: stepResult.description,
+      message: this.#getWarningMessage(stepResult),
+    };
+
+    if (stepResult.exitCode !== undefined)
+    {
+      warning.exitCode = stepResult.exitCode;
+    }
+
+    return warning;
+  }
+
+  /**
+   Get a useful message for a warning step result.
+   */
+  #getWarningMessage(stepResult: StepResult | ChainStepResult): string
+  {
+    if (stepResult.error)
+    {
+      return stepResult.error.message;
+    }
+
+    if (stepResult.exitCode !== undefined && stepResult.exitCode !== 0)
+    {
+      return `Step failed with exit code ${stepResult.exitCode}`;
+    }
+
+    return 'Step completed with warnings';
+  }
+
+  /**
    Print an execution summary.
    */
   #printResultsSummary(result: ExecuteResult): void
@@ -1168,17 +1299,30 @@ export class Script
     ctx.log('─'.repeat(60));
 
     // Status line
-    const statusEmoji = result.state === 'complete' ? '✅' : '❌';
-    const statusText = result.state === 'complete' ? 'Completed' : 'Failed';
+    const statusEmoji = result.status === 'success'
+      ? '✅'
+      : result.status === 'dry-run'
+      ? '🔎'
+      : '❌';
+    const statusText = result.status === 'success' && result.warnings.length > 0
+      ? 'Completed with warnings'
+      : result.status === 'success'
+      ? 'Completed'
+      : result.status === 'dry-run'
+      ? 'Dry run'
+      : result.status === 'aborted'
+      ? 'Aborted'
+      : 'Failed';
     ctx.log(`\nStatus: ${statusEmoji} ${statusText}`);
 
     // Stats
     const chainInfo = result.totalStepsRun !== result.stepsRun
       ? `, ${result.totalStepsRun} total executed`
       : '';
-    const statsLine = result.stepsSkipped > 0
-      ? `Steps: ${result.stepsRun} top-level${chainInfo}, ${result.stepsSkipped} skipped`
-      : `Steps: ${result.stepsRun} top-level${chainInfo}`;
+    const skippedInfo = result.stepsSkipped > 0 ? `, ${result.stepsSkipped} skipped` : '';
+    const failedInfo = result.stepsFailed > 0 ? `, ${result.stepsFailed} failed` : '';
+    const warnedInfo = result.stepsWarned > 0 ? `, ${result.stepsWarned} warned` : '';
+    const statsLine = `Steps: ${result.stepsRun} top-level${chainInfo}${skippedInfo}${failedInfo}${warnedInfo}`;
     ctx.log(statsLine);
 
     if (result.totalDurationMs !== undefined)

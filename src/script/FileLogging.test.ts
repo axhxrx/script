@@ -503,7 +503,7 @@ describe('Integration: real script execution with file logging', () =>
 
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
 
     // Verify main log has framework messages
     const mainContent = await readFile(mainLog, 'utf-8');

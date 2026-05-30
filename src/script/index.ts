@@ -4,7 +4,7 @@ export { ask } from './ask.ts';
 export { autoRedact } from './autoRedact.ts';
 export { createScript } from './createScript.ts';
 export type { ExecuteOptions } from './ExecuteOptions.ts';
-export type { ExecuteResult, ScriptState } from './ExecuteResult.ts';
+export type { ExecuteResult, ExecuteStatus, ExecuteWarning, ScriptState } from './ExecuteResult.ts';
 export type { FileOptions } from './FileOptions.ts';
 export { OutputContext } from './OutputContext.ts';
 export { parseScriptArgs } from './parseScriptArgs.ts';

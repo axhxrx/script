@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { format } from 'node:util';
 
-import { defaultOutputContext } from './OutputContext.ts';
 import type { OutputContext } from './OutputContext.ts';
+import { defaultOutputContext } from './OutputContext.ts';
 import type { Step } from './Step.ts';
 import type { StepResult, StepStatus, StepType } from './StepResult.ts';
 
@@ -35,24 +35,73 @@ export interface RunStepOptions
 const isUnix = process.platform !== 'win32';
 const unixCaptureRequirementsMessage = 'Unix output capture requires bash and tee on PATH.';
 
+interface ProcessResult
+{
+  error?: Error;
+  signal?: NodeJS.Signals | null;
+  status?: number | null;
+}
+
+/**
+ Create a clearer error when a command process could not finish with a normal exit code.
+ */
+function getProcessFailure(command: string, result: ProcessResult, cwd?: string): Error | undefined
+{
+  if (result.error)
+  {
+    if (cwd)
+    {
+      return new Error(`Failed to start command: ${command}: cwd may be unavailable: ${cwd}: ${result.error.message}`);
+    }
+
+    return new Error(`Failed to start command: ${command}: ${result.error.message}`);
+  }
+
+  if (result.signal)
+  {
+    return new Error(`Command terminated by signal ${result.signal}: ${command}`);
+  }
+
+  if (typeof result.status !== 'number')
+  {
+    return new Error(`Command failed without an exit code: ${command}`);
+  }
+
+  return undefined;
+}
+
+function getProcessExitCode(result: ProcessResult): number
+{
+  return typeof result.status === 'number' ? result.status : 1;
+}
+
 /**
  Create a clearer error when Unix tee-based capture cannot start.
  */
-function getUnixCaptureShellError(error: unknown): Error
+function getUnixCaptureShellError(command: string, error: unknown, cwd?: string): Error
 {
+  const processError = error instanceof Error ? error : new Error(String(error));
   if (
-    typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as NodeJS.ErrnoException).code === 'ENOENT'
+    typeof processError === 'object'
+    && processError !== null
+    && 'code' in processError
+    && (processError as NodeJS.ErrnoException).code === 'ENOENT'
   )
   {
+    const cwdHint = cwd
+      ? ` If bash is available, cwd may be unavailable: ${cwd}: ${processError.message}`
+      : '';
     return new Error(
-      `${unixCaptureRequirementsMessage} Could not start bash for tee-based output capture.`,
+      `${unixCaptureRequirementsMessage} Could not start bash for tee-based output capture.${cwdHint}`,
     );
   }
 
-  return error instanceof Error ? error : new Error(String(error));
+  if (cwd)
+  {
+    return getProcessFailure(command, { error: processError }, cwd) ?? processError;
+  }
+
+  return processError;
 }
 
 /**
@@ -71,7 +120,7 @@ function createTempPath(prefix: string): string
 async function runCommandWithTee(
   command: string,
   options: { cwd?: string; env?: Record<string, string> },
-): Promise<{ exitCode: number; stdout: string; stderr: string }>
+): Promise<{ exitCode: number; stdout: string; stderr: string; error?: Error }>
 {
   const { writeFile } = await import('node:fs/promises');
 
@@ -107,7 +156,7 @@ exit $__exit
   {
     let settled = false;
 
-    const rejectOnce = async (error: unknown) =>
+    const resolveWithStartupError = async (error: unknown) =>
     {
       if (settled)
       {
@@ -118,7 +167,13 @@ exit $__exit
       {});
       await unlink(stderrFile).catch(() =>
       {});
-      reject(getUnixCaptureShellError(error));
+      const processError = error instanceof Error ? error : new Error(String(error));
+      resolve({
+        exitCode: 1,
+        stdout: '',
+        stderr: '',
+        error: getUnixCaptureShellError(command, processError, options.cwd),
+      });
     };
 
     const child = spawn('bash', ['-c', wrappedCmd], {
@@ -127,7 +182,7 @@ exit $__exit
       stdio: 'inherit', // Pass through to terminal
     });
 
-    child.on('close', async (code) =>
+    child.on('close', async (code, signal) =>
     {
       if (settled)
       {
@@ -153,11 +208,21 @@ exit $__exit
 
         if (code === 127 && stderr.includes(unixCaptureRequirementsMessage))
         {
-          reject(new Error(stderr.trim()));
+          resolve({
+            exitCode: 127,
+            stdout,
+            stderr,
+            error: new Error(stderr.trim()),
+          });
           return;
         }
 
-        resolve({ exitCode: code ?? 0, stdout, stderr });
+        resolve({
+          exitCode: getProcessExitCode({ status: code, signal }),
+          stdout,
+          stderr,
+          error: getProcessFailure(command, { status: code, signal }, options.cwd),
+        });
       }
       catch (err)
       {
@@ -167,7 +232,7 @@ exit $__exit
 
     child.on('error', (error) =>
     {
-      void rejectOnce(error);
+      void resolveWithStartupError(error);
     });
   });
 }
@@ -185,12 +250,13 @@ function runCommandWithCapture(
     ctx?: OutputContext;
     interactiveStdin?: boolean;
   },
-): Promise<{ exitCode: number; stdout: string; stderr: string }>
+): Promise<{ exitCode: number; stdout: string; stderr: string; error?: Error }>
 {
   const ctx = options.ctx ?? defaultOutputContext;
 
-  return new Promise((resolve, reject) =>
+  return new Promise((resolve) =>
   {
+    let settled = false;
     const child = spawn(command, {
       shell: true,
       cwd: options.cwd,
@@ -210,7 +276,13 @@ function runCommandWithCapture(
 
     if (!childStdout || !childStderr)
     {
-      reject(new Error('Failed to capture child process output streams.'));
+      settled = true;
+      resolve({
+        exitCode: 1,
+        stdout,
+        stderr,
+        error: new Error('Failed to capture child process output streams.'),
+      });
       return;
     }
 
@@ -228,15 +300,39 @@ function runCommandWithCapture(
       stderr += text; // Capture
     });
 
-    child.on('close', (code) =>
+    child.on('close', (code, signal) =>
     {
+      if (settled)
+      {
+        return;
+      }
+      settled = true;
+
       // Flush any remaining bytes in the decoders
       stdout += stdoutDecoder.decode(new Uint8Array(0));
       stderr += stderrDecoder.decode(new Uint8Array(0));
-      resolve({ exitCode: code ?? 0, stdout, stderr });
+      resolve({
+        exitCode: getProcessExitCode({ status: code, signal }),
+        stdout,
+        stderr,
+        error: getProcessFailure(command, { status: code, signal }, options.cwd),
+      });
     });
 
-    child.on('error', reject);
+    child.on('error', (error) =>
+    {
+      if (settled)
+      {
+        return;
+      }
+      settled = true;
+      resolve({
+        exitCode: 1,
+        stdout,
+        stderr,
+        error: getProcessFailure(command, { error }, options.cwd),
+      });
+    });
   });
 }
 
@@ -248,7 +344,7 @@ async function runSingleCommand(
   stepOptions: Step['options'],
   captureOutput: boolean,
   ctx: OutputContext,
-): Promise<{ exitCode: number; stdout?: string; stderr?: string }>
+): Promise<{ exitCode: number; stdout?: string; stderr?: string; error?: Error }>
 {
   if (stepOptions.interactive)
   {
@@ -281,7 +377,10 @@ async function runSingleCommand(
       env: { ...process.env, ...stepOptions.env },
     });
 
-    return { exitCode: result.status ?? 0 };
+    return {
+      exitCode: getProcessExitCode(result),
+      error: getProcessFailure(command, result, stepOptions.cwd),
+    };
   }
   else if (captureOutput)
   {
@@ -313,7 +412,10 @@ async function runSingleCommand(
       env: { ...process.env, ...stepOptions.env },
     });
 
-    return { exitCode: result.status ?? 0 };
+    return {
+      exitCode: getProcessExitCode(result),
+      error: getProcessFailure(command, result, stepOptions.cwd),
+    };
   }
 }
 
@@ -438,6 +540,7 @@ export async function runStep(
   const startedAt = new Date();
   let status: StepStatus = 'success';
   let exitCode: number | undefined;
+  let failureExitCode: number | undefined;
   let stdout: string | undefined;
   let stderr: string | undefined;
   let error: Error | undefined;
@@ -476,22 +579,31 @@ export async function runStep(
         stdout = combinedStdout || undefined;
         stderr = combinedStderr || undefined;
 
-        if (result.exitCode !== 0 && stepOptions.onError !== 'continue')
+        if (result.error || result.exitCode !== 0)
         {
+          const failure = result.error
+            ?? new Error(
+              `Command failed with exit code ${result.exitCode}: ${cmd}`,
+            );
+          failureExitCode ??= result.exitCode;
+          error ??= failure;
+
           if (stepOptions.onError === 'warn')
           {
             ctx.warn(
-              `⚠️  Command failed with exit code ${result.exitCode}: ${cmd}`,
+              `⚠️  ${failure.message}`,
             );
             status = 'warning';
             // Continue to next command in warn mode
           }
+          else if (stepOptions.onError === 'continue')
+          {
+            status = 'warning';
+          }
           else
           {
             // Default: fail mode - throw and stop
-            throw new Error(
-              `Command failed with exit code ${result.exitCode}: ${cmd}`,
-            );
+            throw failure;
           }
         }
       }
@@ -544,37 +656,45 @@ export async function runStep(
         if (fnResult === false)
         {
           exitCode = 1;
-          if (stepOptions.onError !== 'continue')
+          failureExitCode ??= exitCode;
+          const failure = new Error('Function returned false');
+          error ??= failure;
+
+          if (stepOptions.onError === 'warn')
           {
-            if (stepOptions.onError === 'warn')
-            {
-              ctx.warn(`⚠️  Function returned false`);
-              status = 'warning';
-            }
-            else
-            {
-              throw new Error('Function returned false');
-            }
+            ctx.warn(`⚠️  ${failure.message}`);
+            status = 'warning';
+          }
+          else if (stepOptions.onError === 'continue')
+          {
+            status = 'warning';
+          }
+          else
+          {
+            throw failure;
           }
         }
         else if (typeof fnResult === 'number' && fnResult !== 0)
         {
           exitCode = fnResult;
-          if (stepOptions.onError !== 'continue')
+          failureExitCode ??= exitCode;
+          const failure = new Error(
+            `Function returned non-zero exit code: ${fnResult}`,
+          );
+          error ??= failure;
+
+          if (stepOptions.onError === 'warn')
           {
-            if (stepOptions.onError === 'warn')
-            {
-              ctx.warn(
-                `⚠️  Function returned non-zero exit code: ${fnResult}`,
-              );
-              status = 'warning';
-            }
-            else
-            {
-              throw new Error(
-                `Function returned non-zero exit code: ${fnResult}`,
-              );
-            }
+            ctx.warn(`⚠️  ${failure.message}`);
+            status = 'warning';
+          }
+          else if (stepOptions.onError === 'continue')
+          {
+            status = 'warning';
+          }
+          else
+          {
+            throw failure;
           }
         }
       }
@@ -594,7 +714,7 @@ export async function runStep(
     else if (stepOptions.onError === 'continue')
     {
       ctx.log('✓ Continued (error ignored)\n');
-      status = 'success'; // Treat as success since we're continuing
+      status = 'warning';
     }
     else
     {
@@ -614,7 +734,7 @@ export async function runStep(
     startedAt,
     finishedAt,
     durationMs: finishedAt.getTime() - startedAt.getTime(),
-    exitCode,
+    exitCode: failureExitCode ?? exitCode,
     stdout,
     stderr,
     error,

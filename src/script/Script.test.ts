@@ -1,6 +1,9 @@
 import { assert } from '@std/assert';
 import { expect } from '@std/expect';
 import { spawnSync } from 'node:child_process';
+import { existsSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 import { afterEach, beforeEach, describe, test } from '@axhxrx/test';
@@ -319,16 +322,16 @@ console.log(JSON.stringify({ aborted: result.aborted, stepsRun: result.stepsRun 
   });
 });
 
-describe('Script.execute() state and stepResults', () =>
+describe('Script.execute() status and stepResults', () =>
 {
-  test('successful execution has state: complete', async () =>
+  test('successful execution has status: success', async () =>
   {
     const script = new Script();
     script.add('echo test');
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
     expect(result.totalStepsRun).toBe(1);
@@ -365,20 +368,67 @@ describe('Script.execute() state and stepResults', () =>
     expect(step.finishedAt).toBeInstanceOf(Date);
   });
 
-  test('failed execution has state: failed', async () =>
+  test('failed execution has status: failed', async () =>
   {
     const script = new Script();
     script.add('exit 1'); // This should fail
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.aborted).toBe(true);
+    expect(result.stepsFailed).toBe(1);
+    expect(result.stepsWarned).toBe(0);
+    expect(result.warnings).toEqual([]);
     expect(result.error).toBeDefined();
     expect(result.stepResults.length).toBe(1);
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('error');
+  });
+
+  test('legacy state maps final statuses for compatibility', async () =>
+  {
+    const successScript = new Script();
+    successScript.add('echo success');
+    const successResult = await successScript.execute({ yes: true, printResults: false });
+
+    expect(successResult.status).toBe('success');
+    expect(successResult.state).toBe('complete');
+
+    const dryRunScript = new Script();
+    dryRunScript.add('echo dry-run');
+    const dryRunResult = await dryRunScript.execute({ dryRun: true, parseArgs: false, printResults: false });
+
+    expect(dryRunResult.status).toBe('dry-run');
+    expect(dryRunResult.state).toBe('complete');
+
+    const failedScript = new Script();
+    failedScript.add('exit 1');
+    const failedResult = await failedScript.execute({ yes: true, printResults: false });
+
+    expect(failedResult.status).toBe('failed');
+    expect(failedResult.state).toBe('failed');
+
+    const code = `
+import { createScript } from ${JSON.stringify(scriptModuleUrl)};
+const script = createScript();
+script.add('echo should-not-run');
+const result = await script.execute({ parseArgs: false, printResults: false });
+console.log(JSON.stringify({ status: result.status, state: result.state, aborted: result.aborted }));
+`;
+
+    const abortedResult = spawnSync('deno', ['eval', code], {
+      encoding: 'utf-8',
+      input: 'n\n',
+      timeout: 2000,
+    });
+
+    expect(abortedResult.error).toBeUndefined();
+    expect(abortedResult.status).toBe(0);
+    expect(abortedResult.stdout).toContain('"status":"aborted"');
+    expect(abortedResult.stdout).toContain('"state":"failed"');
+    expect(abortedResult.stdout).toContain('"aborted":true');
   });
 
   test('totalDurationMs is tracked', async () =>
@@ -421,7 +471,7 @@ describe('Script.execute() state and stepResults', () =>
       captureOutput: true,
     });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.error).toBeDefined();
     // With an empty PATH, either failure mode is acceptable — the test's
     // purpose is only to confirm that a comprehensible error is produced.
@@ -437,6 +487,225 @@ describe('Script.execute() state and stepResults', () =>
     ).toBe(true);
   });
 
+  test('interactive command terminated by signal reports the signal', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    script.add('kill -TERM $$').interactive();
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toContain('Command terminated by signal SIGTERM');
+    expect(result.error?.message).not.toContain('exit code null');
+    const step = result.stepResults[0];
+    assert(step);
+    expect(step.status).toBe('error');
+  });
+
+  test('interactive spawn errors are surfaced', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const missingCwd = join(tmpdir(), `script-missing-cwd-${Date.now()}`);
+    script.add('echo never').interactive().cwd(missingCwd);
+
+    const result = await script.execute({ yes: true, printResults: false });
+
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toContain('Failed to start command: echo never');
+    expect(result.error?.message).not.toContain('exit code null');
+    const step = result.stepResults[0];
+    assert(step);
+    expect(step.status).toBe('error');
+  });
+
+  test('interactive file logging reports signal-terminated commands', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const logPath = join(tmpdir(), `script-interactive-signal-${process.pid}-${Date.now()}.log`);
+    try
+    {
+      await script.file({ path: logPath, mode: 'overwrite', output: 'command' });
+      script.add('kill -TERM $$').interactive();
+
+      const result = await script.execute({ yes: true, printResults: false });
+
+      expect(result.status).toBe('failed');
+      expect(result.error?.message).toContain('Command terminated by signal SIGTERM');
+      expect(result.error?.message).not.toContain('exit code null');
+      const step = result.stepResults[0];
+      assert(step);
+      expect(step.status).toBe('error');
+    }
+    finally
+    {
+      await script.close();
+      if (existsSync(logPath))
+      {
+        unlinkSync(logPath);
+      }
+    }
+  });
+
+  test('interactive file logging reports cwd startup context without masking Unix capture requirements', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const logPath = join(tmpdir(), `script-interactive-cwd-${process.pid}-${Date.now()}.log`);
+    const missingCwd = join(tmpdir(), `script-missing-cwd-${Date.now()}`);
+    try
+    {
+      await script.file({ path: logPath, mode: 'overwrite', output: 'command' });
+      script.add('echo never').interactive().cwd(missingCwd);
+
+      const result = await script.execute({ yes: true, printResults: false });
+
+      expect(result.status).toBe('failed');
+      expect(result.error?.message).toContain('Could not start bash');
+      expect(result.error?.message).toContain('cwd may be unavailable');
+      expect(result.error?.message).toContain('bash and tee');
+      const step = result.stepResults[0];
+      assert(step);
+      expect(step.status).toBe('error');
+    }
+    finally
+    {
+      await script.close();
+      if (existsSync(logPath))
+      {
+        unlinkSync(logPath);
+      }
+    }
+  });
+
+  test('interactive file logging with cwd keeps missing bash or tee diagnostics', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const logPath = join(tmpdir(), `script-interactive-cwd-path-${process.pid}-${Date.now()}.log`);
+    try
+    {
+      await script.file({ path: logPath, mode: 'overwrite', output: 'command' });
+      script.add('echo test').interactive().cwd(tmpdir()).env({ PATH: '' });
+
+      const result = await script.execute({ yes: true, printResults: false });
+
+      expect(result.status).toBe('failed');
+      const message = result.error?.message ?? '';
+      expect(message).toContain('bash and tee');
+      expect(
+        message.includes('Could not find tee') || message.includes('Could not start bash'),
+      ).toBe(true);
+    }
+    finally
+    {
+      await script.close();
+      if (existsSync(logPath))
+      {
+        unlinkSync(logPath);
+      }
+    }
+  });
+
+  test('interactive onError continue proceeds after signal-terminated command', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const marker = join(tmpdir(), `script-continue-marker-${process.pid}-${Date.now()}`);
+    try
+    {
+      script.add(`
+        kill -TERM $$
+        touch ${marker}
+      `).interactive().onError('continue');
+
+      const result = await script.execute({ yes: true, printResults: false });
+
+      expect(result.status).toBe('success');
+      expect(result.stepsWarned).toBe(1);
+      expect(result.stepsFailed).toBe(0);
+      expect(existsSync(marker)).toBe(true);
+      const step = result.stepResults[0];
+      assert(step);
+      expect(step.status).toBe('warning');
+    }
+    finally
+    {
+      if (existsSync(marker))
+      {
+        unlinkSync(marker);
+      }
+    }
+  });
+
+  test('interactive file logging onError continue proceeds after signal-terminated command', async () =>
+  {
+    if (process.platform === 'win32')
+    {
+      return;
+    }
+
+    const script = new Script();
+    const logPath = join(tmpdir(), `script-interactive-continue-${process.pid}-${Date.now()}.log`);
+    const marker = join(tmpdir(), `script-continue-marker-${process.pid}-${Date.now()}`);
+    try
+    {
+      await script.file({ path: logPath, mode: 'overwrite', output: 'command' });
+      script.add(`
+        kill -TERM $$
+        touch ${marker}
+      `).interactive().onError('continue');
+
+      const result = await script.execute({ yes: true, printResults: false });
+
+      expect(result.status).toBe('success');
+      expect(result.stepsWarned).toBe(1);
+      expect(result.stepsFailed).toBe(0);
+      expect(existsSync(marker)).toBe(true);
+      const step = result.stepResults[0];
+      assert(step);
+      expect(step.status).toBe('warning');
+    }
+    finally
+    {
+      await script.close();
+      if (existsSync(marker))
+      {
+        unlinkSync(marker);
+      }
+      if (existsSync(logPath))
+      {
+        unlinkSync(logPath);
+      }
+    }
+  });
+
   test('printResults: false suppresses summary', async () =>
   {
     const script = new Script();
@@ -445,7 +714,7 @@ describe('Script.execute() state and stepResults', () =>
     // This should not print any summary
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
   });
 
   test('.stepResults returns accumulated results during execution', async () =>
@@ -570,7 +839,7 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     const step = result.stepResults[0];
     assert(step);
     expect(step.stdout).toContain('works');
@@ -588,12 +857,22 @@ describe('Script.add() with commands[] (multi-command steps)', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const step = result.stepResults[0];
     assert(step);
     expect(step.stdout).toContain('first');
     expect(step.stdout).toContain('third');
     expect(step.status).toBe('warning');
+    expect(result.stepsWarned).toBe(1);
+    expect(result.stepsFailed).toBe(0);
+    expect(result.warnings).toEqual([
+      {
+        stepIndex: 0,
+        description: '[3 commands]',
+        message: 'Command failed with exit code 1: exit 1',
+        exitCode: 1,
+      },
+    ]);
   });
 
   test('stepResult includes commands array', async () =>
@@ -645,7 +924,7 @@ describe('.or() fallback API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackRan).toBe(true);
   });
 
@@ -664,7 +943,7 @@ describe('.or() fallback API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackRan).toBe(false);
   });
 
@@ -695,7 +974,7 @@ describe('.or() fallback API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackOrder).toEqual([1, 2]); // Only first two ran
   });
 
@@ -718,7 +997,7 @@ describe('.or() fallback API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
   });
 });
 
@@ -745,7 +1024,7 @@ describe('.or() then .and() interaction', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(bRan).toBe(false);
     expect(cRan).toBe(false);
   });
@@ -771,7 +1050,7 @@ describe('.or() then .and() interaction', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(order).toEqual(['A', 'B', 'C']);
   });
 
@@ -795,7 +1074,7 @@ describe('.or() then .and() interaction', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(cRan).toBe(false);
   });
 });
@@ -822,7 +1101,7 @@ describe('.and() chaining API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(order).toEqual([1, 2, 3]);
     // Only one top-level step, so one stepResult
     expect(result.stepResults.length).toBe(1);
@@ -852,7 +1131,7 @@ describe('.and() chaining API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(firstRan).toBe(true);
     expect(secondRan).toBe(true);
     expect(thirdRan).toBe(true);
@@ -876,7 +1155,7 @@ describe('.and() chaining API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     // The second step ran with /tmp as cwd, first step ran with original cwd
     expect(cwds.length).toBe(2);
   });
@@ -901,7 +1180,7 @@ describe('.and() chaining API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackRan).toBe(true);
   });
 
@@ -925,7 +1204,7 @@ describe('.and() chaining API', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(thirdRan).toBe(false);
   });
 });
@@ -943,7 +1222,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('success');
@@ -957,7 +1236,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('success');
@@ -971,7 +1250,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('error');
@@ -985,7 +1264,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('success');
@@ -999,7 +1278,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('error');
@@ -1014,7 +1293,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     const step = result.stepResults[0];
     assert(step);
     expect(step.exitCode).toBe(-1);
@@ -1032,7 +1311,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
   });
 
   test('async function returning non-zero fails', async () =>
@@ -1047,7 +1326,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     const step = result.stepResults[0];
     assert(step);
     expect(step.exitCode).toBe(42);
@@ -1066,7 +1345,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackRan).toBe(true);
   });
 
@@ -1083,7 +1362,7 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(fallbackRan).toBe(true);
   });
 
@@ -1100,11 +1379,19 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(secondRan).toBe(true);
     const step = result.stepResults[0];
     assert(step);
     expect(step.status).toBe('warning');
+    expect(result.stepsWarned).toBe(1);
+    expect(result.stepsFailed).toBe(0);
+    expect(result.warnings.length).toBe(1);
+    const warning = result.warnings[0];
+    assert(warning);
+    expect(warning.stepIndex).toBe(0);
+    expect(warning.message).toBe('Function returned false');
+    expect(warning.exitCode).toBe(1);
   });
 
   test('function returning non-zero with onError: continue silently continues', async () =>
@@ -1120,8 +1407,19 @@ describe('StepFn return value handling', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(secondRan).toBe(true);
+    const step = result.stepResults[0];
+    assert(step);
+    expect(step.status).toBe('warning');
+    expect(result.stepsWarned).toBe(1);
+    expect(result.stepsFailed).toBe(0);
+    expect(result.warnings.length).toBe(1);
+    const warning = result.warnings[0];
+    assert(warning);
+    expect(warning.stepIndex).toBe(0);
+    expect(warning.message).toBe('Function returned non-zero exit code: 99');
+    expect(warning.exitCode).toBe(99);
   });
 });
 
@@ -1162,7 +1460,7 @@ describe('chainResults tracking', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(result.stepsRun).toBe(1);
     expect(result.totalStepsRun).toBe(3);
     const chain = result.stepResults[0]?.chainResults;
@@ -1187,7 +1485,7 @@ describe('chainResults tracking', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const chain = result.stepResults[0]?.chainResults;
     expect(chain?.length).toBe(2);
     expect(chain?.[0]?.linkType).toBe('root');
@@ -1219,7 +1517,7 @@ describe('chainResults tracking', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     const chain = result.stepResults[0]?.chainResults;
     expect(chain?.length).toBe(4);
     expect(chain?.[0]?.linkType).toBe('root');
@@ -1261,7 +1559,7 @@ describe('chainResults tracking', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.stepsRun).toBe(0);
     expect(result.totalStepsRun).toBe(2);
     const chain = result.stepResults[0]?.chainResults;
@@ -1300,7 +1598,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
 
     expect(validationRan).toBe(true);
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('dry-run');
     expect(result.aborted).toBe(false);
     expect(result.executed).toBe(false);
     expect(result.stepsRun).toBe(0);
@@ -1321,7 +1619,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
 
     expect(validationRan).toBe(true);
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.aborted).toBe(true);
     expect(result.executed).toBe(false);
     expect(result.stepsRun).toBe(0);
@@ -1347,7 +1645,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     });
 
     expect(validationRan).toBe(false);
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
     const step = result.stepResults[0];
@@ -1375,7 +1673,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     });
 
     expect(validationRan).toBe(false);
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('dry-run');
     expect(result.aborted).toBe(false);
     expect(result.executed).toBe(false);
     expect(result.stepsRun).toBe(0);
@@ -1398,7 +1696,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     const result = await script.execute({ yes: true, printResults: false });
 
     expect(validationRan).toBe(false);
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(result.executed).toBe(true);
     expect(result.stepsRun).toBe(1);
   });
@@ -1424,7 +1722,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
     });
 
     expect(validationRan).toBe(true);
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.aborted).toBe(true);
   });
 
@@ -1436,7 +1734,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
 
     const result = await script.execute({ yes: true, parseArgs: false, printResults: false });
 
-    expect(result.state).toBe('failed');
+    expect(result.status).toBe('failed');
     expect(result.aborted).toBe(true);
     expect(result.executed).toBe(false);
     expect(result.stepsRun).toBe(0);
@@ -1449,7 +1747,7 @@ describe('Script-level validations with --dry-run and --skip-validations', () =>
 
     const result = await script.execute({ dryRun: true, parseArgs: false, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('dry-run');
     expect(result.executed).toBe(false);
   });
 });
@@ -1468,7 +1766,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(stepRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
     expect(result.stepsRun).toBe(0);
@@ -1491,7 +1789,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(stepRan).toBe(true);
     expect(result.stepsRun).toBe(1);
     expect(result.stepsSkipped).toBe(0);
@@ -1564,7 +1862,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(orRan).toBe(false);
     expect(andRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
@@ -1594,7 +1892,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(rootRan).toBe(false);
     expect(orRan).toBe(false);
     expect(andRan).toBe(false);
@@ -1619,7 +1917,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(rootRan).toBe(false);
     expect(andRan).toBe(false);
     expect(result.stepsSkipped).toBe(1);
@@ -1647,7 +1945,7 @@ describe('.skipIf() — conditional step skipping', () =>
 
     const result = await script.execute({ yes: true, printResults: false });
 
-    expect(result.state).toBe('complete');
+    expect(result.status).toBe('success');
     expect(step1Ran).toBe(true);
     expect(step2Ran).toBe(false);
     expect(step3Ran).toBe(true);

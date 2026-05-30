@@ -21,10 +21,10 @@
     "@std/assert": "npm:@jsr/std__assert",
     "@std/expect": "npm:@jsr/std__expect",
     "@std/testing": "npm:@jsr/std__testing",
-    "@types/bun": "^1.3.11"
+    "@types/bun": "^1.3.14"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.9.3"
   },
   "files": [
     "bin",
