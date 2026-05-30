@@ -414,6 +414,8 @@ import * as script from "jsr:@axhxrx/script";
 
 ## history
 
+🔧 2026-05-30: release 0.2.0 — Fix insufficiently-expressive overall script outcome type, plus some bugs. Bumped minor version because this deprecates `state` in favor of new, more-expressive `status` and changes the shape of the result type.
+
 📖 2026-04-21: release 0.1.6 — Update README to clarify when to and not to use this
 
 🔧 2026-04-20: release 0.1.5 — Add retryCommand() & retry-command.ts CLI
